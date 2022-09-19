@@ -23,7 +23,7 @@ with open('./video_names.txt','r') as f:
             np.save(f"./data/HB/{data[0:-4]}.npy", video_data)
         elif data[0:2] == 'NB':
             video_data = skvideo.io.vread(os.path.join(VIDEO_PATH, f"NB/{data}"))
-            np.save(f"./data/HB/{data[0:-4]}.npy", video_data)
+            np.save(f"./data/NB/{data[0:-4]}.npy", video_data)
         elif data[0:2] == 'SB':
             video_data = skvideo.io.vread(os.path.join(VIDEO_PATH, f"SB/{data}"))
             np.save(f"./data/SB/{data[0:-4]}.npy", video_data)
