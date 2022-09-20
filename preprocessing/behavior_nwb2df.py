@@ -2,6 +2,10 @@ from time import time
 import pynwb
 import numpy as np
 import math
+import os
+
+os.mkdir('C:/project/RNN/preprocessing/behavior_data/behavior_df')
+save_path = 'C:/project/RNN/preprocessing/behavior_data/behavior_df'
 
 # function for transforming sec to HZ, HZ to bin, bin to sec
 def HZ_transform(matrix, column_name, abb):
@@ -24,14 +28,12 @@ def HZ_transform(matrix, column_name, abb):
     matrix[f"{abb}_regarded"] = matrix[f"{abb}_bin"] / 30
     reg_column = matrix.pop(f"{abb}_regarded")
     matrix.insert(column_idx+3,f"{abb}_regarded", reg_column)
-    
-save_path = 'C:/project/RNN/preprocessing/behavior_data'
 
 with open("./nwb_names.txt",'r') as f:
     nwb_names = f.read().splitlines()
 
     for data in nwb_names:
-        #print(data)
+        print(data)
         if data[5] == '_': # if subject_num < 10
             subject_num = data[4]
             io = pynwb.NWBHDF5IO(f"C:/project/RNN/000207/{data[0:5]}/{data}","r")
@@ -50,7 +52,7 @@ with open("./nwb_names.txt",'r') as f:
         
         for names, names_abb in zip(enc_transform_list, enc_transform_abb):
             HZ_transform(encoding, names, names_abb)
-        #print(encoding.keys())
+       # print(encoding.keys())
 
         # for recognition_table
         recognition_ori = nwbfile.intervals['recognition_table'].to_dataframe()
@@ -76,9 +78,9 @@ with open("./nwb_names.txt",'r') as f:
         for names, names_abb in zip(time_transform_list,time_transform_list_abb):
             HZ_transform(timeDiscrimination, names, names_abb)
         #print(timeDiscrimination.keys())
-
+        
         # save dataframes into csv file
-        print(subject_num)
         encoding.to_csv(f"{save_path}/encoding_{subject_num}.csv", index=True)
         recognition.to_csv(f"{save_path}/recognition_{subject_num}.csv", index=False)
         timeDiscrimination.to_csv(f"{save_path}/timeDiscrimination_{subject_num}.csv", index=False)
+        print('saved')
