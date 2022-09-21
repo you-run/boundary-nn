@@ -50,6 +50,7 @@ class BoundaryRecognizer(nn.Module):
             dropout=0.,
             bidirectional=False
         )
+        self.fc = nn.Linear(latent_dim, 3)
 
     def forward(self, x, h0): # (N, T, C, H, W), (RNN_num_layers, latent_dim)
         batch_size, time_len = x.shape[:2]
@@ -57,7 +58,8 @@ class BoundaryRecognizer(nn.Module):
         out = self.cnn(x) # (N * T, latent_dim)        
         out = out.view(batch_size, time_len, self.latent_dim) # (N, T, latent_dim)
         out, hn = self.rnn(out) # (N, T, latent_dim), (num_layers, latent_dim)
-        
+        out = self.fc(out) # (N, T, 3)
+
         return out, hn
 
 
