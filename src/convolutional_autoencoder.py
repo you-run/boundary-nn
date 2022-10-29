@@ -4,6 +4,9 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import torchvision.transforms as T
+from torchvision import transforms
+from PIL import Image
+from torchvision.transforms.functional import to_pil_image
 
 
 class ConvBlock(nn.Module):
@@ -36,32 +39,24 @@ class CNN(nn.Module):
         # encoder
         self.latent_dim = latent_dim
         self.encoder = nn.Sequential(
-            ConvBlock(3, 8, 3, 1, 1, 2),
-            ConvBlock(8, 16, 3, 1, 1, 2),
+            ConvBlock(3, 16, 3, 1, 1, 2),
             ConvBlock(16, 32, 3, 1, 1, 2),
         )
-            # ConvBlock(64, 64, 3, 1, 1, 2),
-            # nn.Flatten(),
-            # nn.Linear(2880, 512),
-            # nn.ReLU(),
-            # nn.Linear(512, latent_dim),
-            # nn.ConvTranspose2d(64, 64, kernel_size= 2, stride = 2, padding = 0),
-            # nn.ReLU(),
+
         self.decoder = nn.Sequential(
-            nn.ConvTranspose2d(32, 16, kernel_size = 2, stride = 2, padding = 0),
-            nn.ReLU(),
-            nn.ConvTranspose2d(16, 8, kernel_size = 2, stride = 2, padding = 0),
-            nn.ReLU(),
-            nn.ConvTranspose2d(8, 3, kernel_size = 2, stride = 2, padding = 0),
-            nn.Sigmoid()
-            # nn.ReLU()
+            nn.ConvTranspose2d(32, 3, kernel_size = 3, stride = 2, padding = 2),
+            nn.Sigmoid(),
         )
         # self.fc = nn.Linear(latent_dim, 3)
 
     def forward(self, x):
         out = self.encoder(x)
+        # print(out.shape)
         out = self.decoder(out)
-        # out = self.fc(out) 
+        transform = T.Resize(size = (270, 480))
+        out = transform(out)
+        # print(out.shape)
+
         return out
 
 # device = torch.device('cuda' if torch.cuda.is_available else 'cpu')
@@ -69,31 +64,31 @@ device = torch.device('cpu')
 model = CNN().to(device)
 criterion = nn.MSELoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+# lambda1 = lambda epoch: 0.85 ** epoch
+# scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda1)
 
 fig = plt.figure()
-ax = fig.add_subplot()
+ax = fig.add_subplot() 
 
 steps = 0
-losses = []
 
 for i in range(10):
     steps+=1
     for root, dirs, files in os.walk("./data/video/HB"):
         for file in files:
-            vread = np.load(os.path.join(root, file))
-            vread = torch.Tensor(np.transpose(vread, (0,3,1,2)))
-            transform = T.Resize(size = (256, 480))
+            vread = torch.from_numpy(np.load(os.path.join(root,file)))
+            vread = vread.permute(0,3,1,2)
+            transform = T.Resize(size = (270, 480))
             vread = transform(vread)
-            # ax.imshow(vread[80].numpy())
+            # ax.imshow(to_pil_image(vread[80]))
             # plt.show()
-            out = model(vread)
-            loss = criterion(out, vread)
+            out = model(vread.float())
+            ax.imshow(to_pil_image(out[85]))
+            plt.show()  
+            loss = criterion(out, vread.float())
             loss.backward()
             optimizer.step()
+            # scheduler.step()
             optimizer.zero_grad()
-            losses.append(loss)
             print(steps, loss)
             model.train()
-
-# plt.plot(losses.detach().numpy())
-# plt.show()
