@@ -8,6 +8,7 @@ from torchvision import transforms
 from PIL import Image
 from torchvision.transforms.functional import to_pil_image
 
+os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
 class ConvBlock(nn.Module):
     def __init__(
