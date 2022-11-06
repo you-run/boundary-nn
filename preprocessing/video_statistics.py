@@ -9,7 +9,7 @@ import random
 identifing NB, SB, HB with video statistics
 '''
 
-def get_pixel(data_path, data):
+def pixel_difference(data_path, data):
     cap1 = cv2.VideoCapture(data_path +'/' + data)
     cap2 = cv2.VideoCapture(data_path + '/' + data)
     _, image2 = cap2.read()
@@ -34,30 +34,53 @@ def get_pixel(data_path, data):
     cv2.destroyAllWindows()
     return (diff_mean, diff_var)
 
-def plot_results(data, label):
+def frame_average(data_path, data):
+    cap = cv2.VideoCapture(data_path + '/' + data)
+    _, image = cap.read() # image : (w,h,c) = (540, 960, 3)
+    frame_length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    frame_pix = np.zeros(frame_length)
+    frame_var = np.zeros(frame_length)
+    for frame_num in range(frame_length):
+        frame_pix[frame_num] = np.mean(image)
+        frame_var[frame_num] = np.var(image)
+        #print(np.mean(image))
+        _, image = cap.read()
+    cap.release()
+    cv2.destroyAllWindows()
+    return frame_pix, frame_var
+
+def plot_twin_results(data, label, title):
     num_data = len(data)
     fig,ax = plt.subplots()
     ax.plot(data[0], color='red')
     ax.set_xlabel('frame number')
     ax.set_ylabel(label[0], color='red')
-    ax.set_ylim(0,300)
+    #ax.set_ylim(0,300)
     ax2 = ax.twinx()
     ax2.plot(data[1], color='blue',alpha=0.5)
     ax2.set_ylabel(label[1], color='blue')
-    ax2.set_ylim(0,12000)
-    plt.title(f"pixel-by-pixel difference in {video}")
+    #ax2.set_ylim(0,12000)
+    plt.title(f"{title} in {video}")
     plt.show()
 
 
 boundary_path = 'C:/project/RNN/video/MemSeg_clips'
 num_video = 3
+'''
+frame_pix, frame_var = frame_average('C:/project/RNN/video/MemSeg_clips/HB', 'HB_23.mp4')
+video = 'HB_23.mp4'
+plot_twin_results((frame_pix, frame_var), ('mean','variance'), 'frame-by-frame difference')
+'''
 
 for boundary in os.listdir(boundary_path):
-    print(boundary)
+    #print(boundary)
     path = os.path.join(boundary_path, boundary)
     videos = os.listdir(path)
     random.shuffle(videos)
     for video in videos[0:num_video]:
         print(video)
-        mean, var = get_pixel(path, video)
-        plot_results((mean, var), ('mean', 'variance'))
+        #mean, var = pixel_difference(path, video)
+        #plot_twin_results((mean, var), ('mean', 'variance'))
+        frame_pix, frame_var = frame_average(path, video)
+        plot_twin_results((frame_pix, frame_var), ('mean','variance'), 'frame-by-frame difference')
+        
