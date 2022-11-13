@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-
+import torchvision.transforms as T
 
 class ConvBlock(nn.Module):
     def __init__(
@@ -64,7 +64,7 @@ class BoundaryRecognizer(nn.Module):
 
 
 class ConvAutoencoder(nn.Module):
-    def __init__(self, latent_dim=3):
+    def __init__(self, latent_dim=3, original_size=(270, 480)):
         super().__init__()
         # encoder
         self.latent_dim = latent_dim
@@ -83,10 +83,13 @@ class ConvAutoencoder(nn.Module):
             nn.ConvTranspose2d(32, 3, kernel_size = 3, stride = 2, padding = 2),
             nn.Sigmoid()
         )
+        
+        self.decoder_resize = T.Resize(size=original_size)
 
     def forward(self, x): # x: (B, 3, 270, 480)
         latent = self.encoder(x)
         decoder_out = self.decoder(latent)
+        decoder_out = self.decoder_resize(decoder_out)
         return latent, decoder_out
     
     def get_latent(self, x): # Not Train

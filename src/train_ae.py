@@ -46,11 +46,10 @@ def train_one_epoch(model, optimizer, criterion, dataloader, device):
 
     losses = []    
     for x in tqdm(dataloader):
-        print(x.shape)
         x = x.to(device)
         _, decoder_out = model(x)
         optimizer.zero_grad()
-        loss = criterion(decoder_out, input)
+        loss = criterion(decoder_out, x)
         loss.backward()
         optimizer.step()
 

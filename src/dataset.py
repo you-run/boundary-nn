@@ -1,6 +1,5 @@
 import glob
 from PIL import Image
-from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
 
 
@@ -23,10 +22,12 @@ class VideoFrameDataset(Dataset):
 
 
 if __name__ == "__main__":
-    transform = transforms.Compose([
-        transforms.Resize(size=(270, 480)),
-        transforms.ToTensor(),
-        transforms.Normalize(
+    import torchvision.transforms as T
+
+    transform = T.Compose([
+        T.Resize(size=(270, 480)),
+        T.ToTensor(),
+        T.Normalize(
             mean=[0.485, 0.456, 0.406],
             std=[0.229, 0.224, 0.225]
         ),
