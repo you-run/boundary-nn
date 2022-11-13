@@ -8,6 +8,7 @@ __pycache__/
 data/video/
 MemSeg_clips/
 data/video_frame/
+log_*/
 *.ipynb
 
 # C extensions
