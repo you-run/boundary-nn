@@ -83,13 +83,14 @@ def eval(model, eval_dataset, epoch, log_path, device): # dataset : example data
     fig.suptitle(f"Before & After at epoch {epoch}")
     plt.savefig(os.path.join(log_path, f"epoch_{epoch}.png"))
 
-def plot_progress(args, losses):
+def plot_progress(args, losses, log_path):
     fig, ax = plt.subplots(1, 1, figsize=(4, 4))
     ax.set_title("Train Loss")
-    ax.plot(list(range(1, args.epochs + 1), losses))
+    ax.plot(list(range(1, args.epochs + 1)), losses)
     ax.set_xlabel("Epoch")
     ax.set_ylabel("Loss")
-    plt.show()
+    plt.savefig(os.path.join(log_path, f"train_loss.png"))
+
 
 if __name__ == "__main__":
     args = get_args()
@@ -136,4 +137,4 @@ if __name__ == "__main__":
             print(f"[Epoch {epoch + 1}/{args.epochs}] Train loss: {train_loss:.3f}")
 
     # Plotting
-    plot_progress(args, train_losses)
+    plot_progress(args, train_losses, log_path)
