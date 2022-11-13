@@ -9,7 +9,8 @@ class VideoFrameDataset(Dataset):
         self.root_dir = root_dir # .../video_frame
         self.data_path = glob.glob(root_dir + "/**/*.png", recursive=True)
         self.transform = transform
-        self.debug = debug
+        if debug:
+            self.data_path = self.data_path[:100]
 
     def __getitem__(self, idx):
         img = Image.open(self.data_path[idx])

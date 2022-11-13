@@ -1,4 +1,6 @@
+import os
 import argparse
+from datetime import datetime
 
 import numpy as np
 import torch
@@ -32,11 +34,15 @@ def get_args():
     )
     parser.add_argument(
         '--eval-step', '-ES', type=int,
-        default=1
+        default=5
     )
     parser.add_argument(
         '--data-dir', '-DD', type=str,
         default='../data/video_frame'
+    )
+    parser.add_argument(
+        '--debug', '-DB', type=bool,
+        default=False
     )
     args = parser.parse_args()
     return args
@@ -58,7 +64,7 @@ def train_one_epoch(model, optimizer, criterion, dataloader, device):
 
     return np.mean(losses)
 
-def eval(model, eval_dataset, epoch, device): # dataset : example dataset
+def eval(model, eval_dataset, epoch, log_path, device): # dataset : example dataset
     def show_bef_aft(ax, bef, aft): # ax = (ax1, ax2)
         ax[0].imshow(to_pil_image(bef, mode='RGB'))
         ax[0].set_title("Original")
@@ -75,7 +81,7 @@ def eval(model, eval_dataset, epoch, device): # dataset : example dataset
     for i in range(plot_len):
         show_bef_aft(ax[i], eval_dataset[i, ...], decoder_out[i, ...])
     fig.suptitle(f"Before & After at epoch {epoch}")
-    plt.show(block=False)
+    plt.savefig(os.path.join(log_path, f"epoch_{epoch}.png"))
 
 def plot_progress(args, losses):
     fig, ax = plt.subplots(1, 1, figsize=(4, 4))
@@ -100,9 +106,10 @@ if __name__ == "__main__":
             #     mean=[0.485, 0.456, 0.406],
             #     std=[0.229, 0.224, 0.225]
             # ),
-        ])
+        ]),
+        debug=args.debug
     )
-    eval_dataset = torch.stack([dataset[1000], dataset[3000], dataset[5000]])
+    eval_dataset = torch.stack([dataset[len(dataset) // (i + 2)] for i in range(5)])
     dataloader = DataLoader(
         dataset,
         batch_size=args.batch_size,
@@ -117,13 +124,15 @@ if __name__ == "__main__":
 
     ### For logging
     train_losses = []
+    log_path = f"./log_{datetime.today().strftime('%b%d_%H:%M')}"
+    os.makedirs(log_path, exist_ok=True)
 
     # Start training
     for epoch in range(args.epochs):
         train_loss = train_one_epoch(model, optimizer, criterion, dataloader, device)
         train_losses.append(train_loss)
         if (epoch + 1) % args.eval_step == 0:
-            eval(model, eval_dataset, epoch + 1, device)
+            eval(model, eval_dataset, epoch + 1, log_path, device)
             print(f"[Epoch {epoch + 1}/{args.epochs}] Train loss: {train_loss:.3f}")
 
     # Plotting
