@@ -10,7 +10,7 @@ class VideoFrameDataset(Dataset):
         self.data_path = glob.glob(root_dir + "/**/*.png", recursive=True)
         self.transform = transform
         if debug:
-            self.data_path = self.data_path[:100]
+            self.data_path = self.data_path[:(len(self.data_path) // 10)]
 
     def __getitem__(self, idx):
         img = Image.open(self.data_path[idx])

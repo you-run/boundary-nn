@@ -19,7 +19,7 @@ def train_one_epoch_ae(model, optimizer, criterion, dataloader, device):
     model.train()
 
     losses = []    
-    for x in tqdm(dataloader):
+    for x in dataloader:
         x = x.to(device)
         _, decoder_out = model(x)
 
@@ -37,7 +37,7 @@ def train_one_epoch_vae(model, optimizer, criterion, dataloader, device):
     model.train()
 
     losses = []    
-    for x in tqdm(dataloader):
+    for x in dataloader:
         x = x.to(device)
         (mu, log_var), decoder_out = model(x)
 
@@ -69,7 +69,7 @@ def eval(model, eval_dataset, epoch, log_path, device): # dataset : example data
     for i in range(plot_len):
         show_bef_aft(ax[i], eval_dataset[i, ...], decoder_out[i, ...])
     fig.suptitle(f"Before & After at epoch {epoch}")
-    plt.savefig(os.path.join(log_path, f"epoch_{epoch}.png"))
+    plt.savefig(os.path.join(log_path, 'recon', f"epoch_{epoch}.png"))
 
 def plot_progress(args, losses, log_path):
     fig, ax = plt.subplots(1, 1, figsize=(4, 4))
@@ -121,15 +121,21 @@ if __name__ == "__main__":
     train_losses = []
     log_path = f"../log/{datetime.today().strftime('%b%d_%H:%M')}_{args.model}"
     os.makedirs(log_path, exist_ok=True)
+    os.makedirs(os.path.join(log_path, 'recon'), exist_ok=True)
 
     # Start training
-    for epoch in range(args.epochs):
+    best_loss = float('inf')
+    for epoch in tqdm(range(args.epochs)):
         train_loss = train_one_epoch(model, optimizer, criterion, dataloader, device)
         train_losses.append(train_loss)
         if (epoch + 1) % args.eval_step == 0:
             eval(model, eval_dataset, epoch + 1, log_path, device)
-            print(f"[Epoch {epoch + 1}/{args.epochs}] Train loss: {train_loss:.3f}")
+            print(f"[Epoch {epoch + 1}/{args.epochs}] Train loss: {train_loss:.5f} | Best loss: {best_loss:.5f}")
+        if best_loss > train_loss:
+            best_loss = train_loss
+            torch.save(model.state_dict(), os.path.join(log_path, f"{args.model}_best.pt"))
+            print(f"Best model at Epoch {epoch + 1}/{args.epochs}, Best train loss: {best_loss:.5f}")
 
     # Plotting
     plot_progress(args, train_losses, log_path)
-    torch.save(model.state_dict(), os.path.join(log_path, f"{args.model}.pt"))
+    torch.save(model.state_dict(), os.path.join(log_path, f"{args.model}_final.pt"))
