@@ -4,6 +4,18 @@ import torch.nn.functional as F
 import torchvision.transforms as T
 
 
+class Interpolate(nn.Module):
+    def __init__(self, size, mode='nearest'):
+        super(Interpolate, self).__init__()
+        self.interp = nn.functional.interpolate
+        self.size = size
+        self.mode = mode
+        
+    def forward(self, x):
+        x = self.interp(x, size=self.size, mode=self.mode)
+        return x
+
+
 class ConvBlock(nn.Module):
     def __init__(
         self, in_channels, out_channels,
@@ -62,33 +74,39 @@ class ConvAutoencoder(nn.Module):
             return self.encoder(x)
 
 class ConvAutoencoderV2(nn.Module):
-    def __init__(self):
+    def __init__(self, latent_dim=3, original_size=(270, 480)):
         super().__init__()
         # Encoder
+        self.latent_dim = latent_dim
         self.encoder = nn.Sequential(
-            ConvBlock(3, 16, 7, 1, 1, 2),
+            ConvBlock(3, 8, 7, 1, 1, 2),
+            ConvBlock(8, 16, 3, 1, 1, 2),
             ConvBlock(16, 32, 3, 1, 1, 2),
             ConvBlock(32, 64, 3, 1, 1, 2),
             nn.Conv2d(64, 3, 1, 1, 0)
         )
 
-        # Decoder
+        # Decodedr
         self.decoder = nn.Sequential(
             nn.Conv2d(3, 64, 1, 1, 0),
             nn.ConvTranspose2d(64, 32, kernel_size=2, stride=2, padding=0),
+            Interpolate(size=(33, 59)),
             nn.ReLU(),
             nn.ConvTranspose2d(32, 16, kernel_size=2, stride=2, padding=0),
+            Interpolate(size=(67, 120)),
             nn.ReLU(),
-            T.Resize(size=(135, 240)),
-            nn.ConvTranspose2d(16, 3, kernel_size=2, stride=2, padding=0),
+            nn.ConvTranspose2d(16, 8, kernel_size=2, stride=2, padding=0),
+            Interpolate(size=(135, 240)),
+            nn.ReLU(),
+            nn.ConvTranspose2d(8, 3, kernel_size=2, stride=2, padding=0),
             nn.Sigmoid()
-        )
+        )        
 
     def forward(self, x): # x: (B, 3, 270, 480)
         latent = self.encoder(x)
         decoder_out = self.decoder(latent)
         return latent, decoder_out
-
+    
     def encoding(self, x): # Not Train
         self.eval()
         with torch.no_grad():

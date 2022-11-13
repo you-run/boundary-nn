@@ -108,6 +108,10 @@ if __name__ == "__main__":
 
     # Model, Utils
     if args.model == 'ae':
+        model = ConvAutoencoder().to(device)
+        train_one_epoch = train_one_epoch_ae
+        criterion = nn.MSELoss()
+    if args.model == 'ae-v2':
         model = ConvAutoencoderV2().to(device)
         train_one_epoch = train_one_epoch_ae
         criterion = nn.MSELoss()

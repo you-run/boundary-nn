@@ -4,7 +4,7 @@ def get_args():
     parser = argparse.ArgumentParser(description="Training")
     parser.add_argument(
         '--model', '-M', type=str,
-        choices=['ae', 'vae'], default='ae'
+        choices=['ae', 'ae-v2', 'vae'], default='ae'
     )
     parser.add_argument(
         '--batch-size', '-B', type=int,
