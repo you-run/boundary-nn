@@ -1,4 +1,5 @@
 import os
+import json
 from datetime import datetime
 
 import numpy as np
@@ -74,7 +75,7 @@ def eval(model, eval_dataset, epoch, log_path, device): # dataset : example data
 def plot_progress(args, losses, log_path):
     fig, ax = plt.subplots(1, 1, figsize=(4, 4))
     ax.set_title("Train Loss")
-    ax.plot(list(range(1, args.epochs + 1)), losses)
+    ax.plot(losses)
     ax.set_xlabel("Epoch")
     ax.set_ylabel("Loss")
     plt.savefig(os.path.join(log_path, f"train_loss.png"))
@@ -126,6 +127,10 @@ if __name__ == "__main__":
     log_path = f"../log/{datetime.today().strftime('%b%d_%H:%M')}_{args.model}"
     os.makedirs(log_path, exist_ok=True)
     os.makedirs(os.path.join(log_path, 'recon'), exist_ok=True)
+    with open(os.path.join(log_path, 'hps.txt'), 'w') as f: # Save h.p.s
+        json.dump(args.__dict__, f, indent=4)
+    with open(os.path.join(log_path, 'model.txt'), 'w') as f: # Save model structure
+        f.write(model.__str__())
 
     # Start training
     best_loss = float('inf')
@@ -135,11 +140,11 @@ if __name__ == "__main__":
         if (epoch + 1) % args.eval_step == 0:
             eval(model, eval_dataset, epoch + 1, log_path, device)
             print(f"[Epoch {epoch + 1}/{args.epochs}] Train loss: {train_loss:.5f} | Best loss: {best_loss:.5f}")
+            plot_progress(args, train_losses, log_path)
         if best_loss > train_loss:
             best_loss = train_loss
             torch.save(model.state_dict(), os.path.join(log_path, f"{args.model}_best.pt"))
             print(f"Best model at Epoch {epoch + 1}/{args.epochs}, Best train loss: {best_loss:.5f}")
 
     # Plotting
-    plot_progress(args, train_losses, log_path)
     torch.save(model.state_dict(), os.path.join(log_path, f"{args.model}_final.pt"))
