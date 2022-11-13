@@ -2,8 +2,12 @@
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Custom
+.DS_Store
 data/video/
-data/frame/
+MemSeg_clips/
+data/video_frame/
 *.ipynb
 
 # C extensions
