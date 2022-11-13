@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torchvision.transforms as T
+
 
 class ConvBlock(nn.Module):
     def __init__(
@@ -25,42 +27,6 @@ class ConvBlock(nn.Module):
         out = self.act(out)
         out = self.pool(out)
         return out
-
-
-class BoundaryRecognizer(nn.Module):
-    def __init__(self, latent_dim=128):
-        super().__init__()
-        self.latent_dim = latent_dim
-        self.cnn = nn.Sequential(
-            ConvBlock(3, 16, 7, 3, 0, 4),
-            ConvBlock(16, 32, 3, 1, 1, 2),
-            ConvBlock(32, 64, 3, 1, 1, 2),
-            ConvBlock(64, 64, 3, 1, 1, 2),
-            nn.Flatten(),
-            nn.Linear(2880, 512),
-            nn.ReLU(),
-            nn.Linear(512, latent_dim),
-        )
-        self.rnn = nn.RNN(
-            input_size=latent_dim,
-            hidden_size=latent_dim,
-            num_layers=2,
-            nonlinearity='relu',
-            batch_first=True,
-            dropout=0.,
-            bidirectional=False
-        )
-        self.fc = nn.Linear(latent_dim, 3)
-
-    def forward(self, x, h0): # (N, T, C, H, W), (RNN_num_layers, latent_dim)
-        batch_size, time_len = x.shape[:2]
-        x = x.view(-1, *x.shape[2:])
-        out = self.cnn(x) # (N * T, latent_dim)        
-        out = out.view(batch_size, time_len, self.latent_dim) # (N, T, latent_dim)
-        out, hn = self.rnn(out) # (N, T, latent_dim), (num_layers, latent_dim)
-        out = self.fc(out) # (N, T, 3)
-
-        return out, hn
 
 
 class ConvAutoencoder(nn.Module):
@@ -90,7 +56,7 @@ class ConvAutoencoder(nn.Module):
         decoder_out = self.decoder_resize(decoder_out)
         return latent, decoder_out
     
-    def get_latent(self, x): # Not Train
+    def encoding(self, x): # Not Train
         self.eval()
         with torch.no_grad():
             return self.encoder(x)
@@ -103,12 +69,12 @@ class ConvAutoencoderV2(nn.Module):
             ConvBlock(3, 16, 7, 1, 1, 2),
             ConvBlock(16, 32, 3, 1, 1, 2),
             ConvBlock(32, 64, 3, 1, 1, 2),
-            nn.Conv2d(64, 2, 1, 1, 0)
+            nn.Conv2d(64, 3, 1, 1, 0)
         )
 
         # Decoder
         self.decoder = nn.Sequential(
-            nn.Conv2d(2, 64, 1, 1, 0),
+            nn.Conv2d(3, 64, 1, 1, 0),
             nn.ConvTranspose2d(64, 32, kernel_size=2, stride=2, padding=0),
             nn.ReLU(),
             nn.ConvTranspose2d(32, 16, kernel_size=2, stride=2, padding=0),
@@ -123,22 +89,70 @@ class ConvAutoencoderV2(nn.Module):
         decoder_out = self.decoder(latent)
         return latent, decoder_out
 
-    def get_latent(self, x): # Not Train
+    def encoding(self, x): # Not Train
         self.eval()
         with torch.no_grad():
             return self.encoder(x)
 
 
-if __name__ == "__main__":
-    # Testing
-    device = torch.device('cuda' if torch.cuda.is_available else 'cpu')
-    print(f"Current device: {device}")
+class VariationalConvAutoencoder(nn.Module):
+    def __init__(self, feature_dim=2 * 16 * 29, z_dim=256):
+        super().__init__()
+        # Initializing the 2 convolutional layers and 2 full-connected layers for the encoder
+        self.encoder = nn.Sequential(
+            ConvBlock(3, 16, 7, 1, 1, 2),
+            ConvBlock(16, 32, 3, 1, 1, 2),
+            ConvBlock(32, 64, 3, 1, 1, 2),
+            ConvBlock(64, 64, 3, 1, 1, 2),
+            nn.Conv2d(64, 2, 1, 1, 0) 
+        )
+        self.flatten = nn.Flatten()
+        
+        self.enc_fc_mu = nn.Linear(feature_dim, z_dim)
+        self.enc_fc_var = nn.Linear(feature_dim, z_dim)
 
-    data = torch.randn(8, 2, 3, 540, 960).to(device) # (N, T, C, H, W)
-    h0 = torch.randn(2, 128).to(device)
+        # Inxitializing the fully-connected layer and 2 convolutional layers for decoder
+        self.dec_fc = nn.Linear(z_dim, feature_dim)
+        self.unflatten = nn.Unflatten(1, (2, 16, 29))
+        self.decoder = nn.Sequential(
+            nn.Conv2d(2, 64, 1, 1, 0),
+            nn.ConvTranspose2d(64, 32, kernel_size=3, stride=2, padding=2),
+            nn.ReLU(),
+            nn.ConvTranspose2d(32, 8, kernel_size=3, stride=2, padding=2),
+            nn.ReLU(),
+            nn.ConvTranspose2d(8, 3, kernel_size=3, stride=2, padding=2),
+            nn.Sigmoid()
+        )
+        self.resize = T.Resize(size=(270,480))
 
-    model = BoundaryRecognizer().to(device)
-    out, hn = model(data, h0)
+    def encoding(self, x):
+        # Input is fed into 2 convolutional layers sequentially
+        # The output feature map are fed into 2 fully-connected layers to predict mean (mu) and variance (logVar)
+        # Mu and logVar are used for generating middle representation z and KL divergence loss
+        x = self.flatten(self.encoder(x))
+        mu = self.enc_fc_mu(x)
+        log_var = self.enc_fc_var(x)
+        return mu, log_var
+         
+    def reparameterize(self, mu, log_var):
+        #Reparameterization takes in the input mu and logVar and sample the mu + std * eps
+        std = torch.exp(log_var / 2)
+        eps = torch.randn_like(std)
+        return mu + std * eps
 
-    print(out.shape)
-    print(hn.shape)
+    def decoding(self, z):
+        # z is fed back into a fully-connected layers and then into two transpose convolutional layers
+        # The generated output is the same size of the original input
+        x = F.relu(self.dec_fc(z))
+        x = self.unflatten(x)
+        x = self.decoder(x)
+        x = self.resize(x)
+        return x
+
+    def forward(self, x):
+        # The entire pipeline of the VAE: encoder -> reparameterization -> decoder
+        # output, mu, and logVar are returned for loss computation
+        mu, log_var = self.encoding(x)
+        z = self.reparameterize(mu, log_var)
+        decoder_out = self.decoding(z)
+        return (mu, log_var), decoder_out

@@ -1,61 +1,49 @@
 import os
-import argparse
 from datetime import datetime
 
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from torchvision.transforms.functional import to_pil_image
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-from model import ConvAutoencoder
+from utils import get_args
 from dataset import VideoFrameDataset
+from model import ConvAutoencoder, ConvAutoencoderV2, VariationalConvAutoencoder
 
-def get_args():
-    parser = argparse.ArgumentParser(description="Training")
-    parser.add_argument(
-        '--batch-size', '-B', type=int,
-        default=64
-    )
-    parser.add_argument(
-        '--lr', '-L', type=float,
-        default=3e-4
-    )
-    parser.add_argument(
-        '--weight-decay', '-W', type=float,
-        default=1e-5
-    )
-    parser.add_argument(
-        '--epochs', '-E', type=int,
-        default=100
-    )
-    parser.add_argument(
-        '--eval-step', '-ES', type=int,
-        default=5
-    )
-    parser.add_argument(
-        '--data-dir', '-DD', type=str,
-        default='../data/video_frame'
-    )
-    parser.add_argument(
-        '--debug', '-DB', type=bool,
-        default=False
-    )
-    args = parser.parse_args()
-    return args
-
-def train_one_epoch(model, optimizer, criterion, dataloader, device):
+def train_one_epoch_ae(model, optimizer, criterion, dataloader, device):
     model.train()
 
     losses = []    
     for x in tqdm(dataloader):
         x = x.to(device)
         _, decoder_out = model(x)
+
         optimizer.zero_grad()
         loss = criterion(decoder_out, x)
+        loss.backward()
+        optimizer.step()
+
+        # Logging
+        losses.append(loss.detach().cpu().item())
+
+    return np.mean(losses)
+
+def train_one_epoch_vae(model, optimizer, criterion, dataloader, device):
+    model.train()
+
+    losses = []    
+    for x in tqdm(dataloader):
+        x = x.to(device)
+        (mu, log_var), decoder_out = model(x)
+
+        optimizer.zero_grad()
+        kl_divergence = 0.5 * torch.sum(-1 - log_var + mu.pow(2) + log_var.exp())
+        loss = F.binary_cross_entropy(decoder_out, x, reduction='sum') + kl_divergence
         loss.backward()
         optimizer.step()
 
@@ -119,13 +107,19 @@ if __name__ == "__main__":
     )
 
     # Model, Utils
-    model = ConvAutoencoder().to(device)
+    if args.model == 'ae':
+        model = ConvAutoencoderV2().to(device)
+        train_one_epoch = train_one_epoch_ae
+        criterion = nn.MSELoss()
+    elif args.model == 'vae':
+        model = VariationalConvAutoencoder().to(device)
+        train_one_epoch = train_one_epoch_vae
+        criterion = None # Substitute with KL Divergence + BCELoss
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    criterion = nn.MSELoss()
 
     ### For logging
     train_losses = []
-    log_path = f"./log_{datetime.today().strftime('%b%d_%H:%M')}"
+    log_path = f"../log/{datetime.today().strftime('%b%d_%H:%M')}_{args.model}"
     os.makedirs(log_path, exist_ok=True)
 
     # Start training
@@ -138,3 +132,4 @@ if __name__ == "__main__":
 
     # Plotting
     plot_progress(args, train_losses, log_path)
+    torch.save(model.state_dict(), os.path.join(log_path, f"{args.model}.pt"))
