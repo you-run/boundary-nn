@@ -16,7 +16,7 @@ def get_args():
     parser = argparse.ArgumentParser(description="Training")
     parser.add_argument(
         '--batch-size', '-B', type=int,
-        default=16
+        default=64
     )
     parser.add_argument(
         '--lr', '-L', type=float,
@@ -58,7 +58,7 @@ def train_one_epoch(model, optimizer, criterion, dataloader, device):
 
     return np.mean(losses)
 
-def eval(model, criterion, eval_dataset, epoch, device): # dataset : example dataset
+def eval(model, eval_dataset, epoch, device): # dataset : example dataset
     def show_bef_aft(ax, bef, aft): # ax = (ax1, ax2)
         ax[0].imshow(to_pil_image(bef, mode='RGB'))
         ax[0].set_title("Original")
@@ -68,14 +68,14 @@ def eval(model, criterion, eval_dataset, epoch, device): # dataset : example dat
     model.eval()
     with torch.no_grad():
         _, decoder_out = model(eval_dataset.to(device))
-        decoder_out = decoder_out.detach().cpu().numpy()
+        decoder_out = decoder_out.detach().cpu()
     
     plot_len = len(eval_dataset) # dataset: (N, 3, 270, 480)
     fig, ax = plt.subplots(plot_len, 2)
-    for i in plot_len:
-        show_bef_aft(ax[i], eval_dataset.numpy()[i, ...], decoder_out[i, ...])
+    for i in range(plot_len):
+        show_bef_aft(ax[i], eval_dataset[i, ...], decoder_out[i, ...])
     fig.suptitle(f"Before & After at epoch {epoch}")
-    plt.show()
+    plt.show(block=False)
 
 def plot_progress(args, losses):
     fig, ax = plt.subplots(1, 1, figsize=(4, 4))
@@ -100,7 +100,8 @@ if __name__ == "__main__":
             #     mean=[0.485, 0.456, 0.406],
             #     std=[0.229, 0.224, 0.225]
             # ),
-    ]))
+        ])
+    )
     eval_dataset = torch.stack([dataset[1000], dataset[3000], dataset[5000]])
     dataloader = DataLoader(
         dataset,
@@ -108,7 +109,6 @@ if __name__ == "__main__":
         shuffle=True,
         num_workers=4
     )
-
 
     # Model, Utils
     model = ConvAutoencoder().to(device)
@@ -123,7 +123,7 @@ if __name__ == "__main__":
         train_loss = train_one_epoch(model, optimizer, criterion, dataloader, device)
         train_losses.append(train_loss)
         if (epoch + 1) % args.eval_step == 0:
-            eval(model, criterion, eval_dataset, epoch + 1, device)
+            eval(model, eval_dataset, epoch + 1, device)
             print(f"[Epoch {epoch + 1}/{args.epochs}] Train loss: {train_loss:.3f}")
 
     # Plotting
