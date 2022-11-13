@@ -63,6 +63,38 @@ class BoundaryRecognizer(nn.Module):
         return out, hn
 
 
+class ConvAutoencoder(nn.Module):
+    def __init__(self, latent_dim=3):
+        super().__init__()
+        # encoder
+        self.latent_dim = latent_dim
+        self.encoder = nn.Sequential(
+            ConvBlock(3, 16, 7, 1, 1, 2),
+            ConvBlock(16, 32, 3, 1, 1, 2),
+            ConvBlock(32, 64, 3, 1, 1, 2),
+            ConvBlock(64, 64, 3, 1, 1, 2),
+            nn.Conv2d(64, 2, 1, 1, 0)
+        )
+
+        self.decoder = nn.Sequential(
+            nn.Conv2d(2, 64, 1, 1, 0),
+            nn.ConvTranspose2d(64, 32, kernel_size = 3, stride = 2, padding = 2),
+            nn.ReLU(),
+            nn.ConvTranspose2d(32, 3, kernel_size = 3, stride = 2, padding = 2),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x): # x: (B, 3, 270, 480)
+        latent = self.encoder(x)
+        decoder_out = self.decoder(latent)
+        return latent, decoder_out
+    
+    def get_latent(self, x): # Not Train
+        self.eval()
+        with torch.no_grad():
+            return self.encoder(x)
+
+
 if __name__ == "__main__":
     # Testing
     device = torch.device('cuda' if torch.cuda.is_available else 'cpu')
