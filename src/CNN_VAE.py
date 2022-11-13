@@ -44,13 +44,7 @@ class ConvBlock(nn.Module):
 class VAE(nn.Module):
     def __init__(self, imgChannels=3, featureDim=2*16*29, zDim=256):
         super(VAE, self).__init__()
-        self.featureDim = featureDim
         # Initializing the 2 convolutional layers and 2 full-connected layers for the encoder
-        self.encConv1 = nn.Conv2d(3, 16, 7, stride=1, padding=1)
-        self.encConv2 = nn.Conv2d(16, 32, 5, stride=1, padding=1)
-        self.encConv3 = nn.Conv2d(32, 64, 5, stride=1, padding=1)
-        self.encConv4 = nn.Conv2d(64, 64, 5, stride=1, padding=1)
-        self.encConv5 = nn.Conv2d(64, 2, 1, stride=1, padding=0)
         self.encConv = nn.Sequential(
             ConvBlock(3, 16, 7, 1, 1, 2),
             ConvBlock(16, 32, 3, 1, 1, 2),
@@ -66,17 +60,16 @@ class VAE(nn.Module):
         # Inxitializing the fully-connected layer and 2 convolutional layers for decoder
         self.unflatten = nn.Unflatten(1, (2, 16, 29))
         self.decFC1 = nn.Linear(zDim, featureDim)
-        self.decConv1 = nn.ConvTranspose2d(32, 16, 5)
-        self.decConv2 = nn.ConvTranspose2d(16, imgChannels, 5)
         self.decConv = nn.Sequential(
             nn.Conv2d(2, 64, 1, 1, 0),
-            nn.ConvTranspose2d(64, 32, kernel_size = 3, stride = 3, padding = 2),
+            nn.ConvTranspose2d(64, 32, kernel_size = 3, stride = 2, padding = 2),
             nn.ReLU(),
-            nn.ConvTranspose2d(32, 8, kernel_size = 3, stride = 3, padding = 2),
+            nn.ConvTranspose2d(32, 8, kernel_size = 3, stride = 2, padding = 2),
             nn.ReLU(),
-            nn.ConvTranspose2d(8, 3, kernel_size = 3, stride = 3, padding = 2),
+            nn.ConvTranspose2d(8, 3, kernel_size = 3, stride = 2, padding = 2),
             nn.Sigmoid()
         )
+        self.resize = T.Resize(size = (270,480))
     
     
     def set_featuredim(self, frame_num, zDim):
@@ -91,26 +84,13 @@ class VAE(nn.Module):
         # Input is fed into 2 convolutional layers sequentially
         # The output feature map are fed into 2 fully-connected layers to predict mean (mu) and variance (logVar)
         # Mu and logVar are used for generating middle representation z and KL divergence loss
-        '''
-        x = F.relu(self.encConv1(x))
-        print(x.shape)
-        x = F.relu(self.encConv2(x))
-        print(x.shape)
-        x = F.relu(self.encConv3(x))
-        print(x.shape)
-        x = F.relu(self.encConv4(x))
-        print(x.shape)
-        x = F.relu(self.encConv5(x))
-        print(x.shape)
-        x = x.reshape(-1, self.featureDim)
-        '''
         x = self.encConv(x)
-        print(f"after encoding, x size : {x.shape}")
+        #print(f"after encoding, x size : {x.shape}")
         x = self.flatten(x)
-        print(f"after flatten, x size : {x.shape}")
+        #print(f"after flatten, x size : {x.shape}")
         mu = self.encFC1(x)
         logVar = self.encFC2(x)
-        print(f"mu/logVar size (after linear) : {mu.shape}, {logVar.shape}")
+        #print(f"mu/logVar size (after linear) : {mu.shape}, {logVar.shape}")
         return mu, logVar
          
     def reparameterize(self, mu, logVar):
@@ -118,7 +98,7 @@ class VAE(nn.Module):
         #Reparameterization takes in the input mu and logVar and sample the mu + std * eps
         std = torch.exp(logVar/2)
         eps = torch.randn_like(std)
-        print(f"output of reparameterize(z) : {(mu + std * eps).shape}")
+        #print(f"output of reparameterize(z) : {(mu + std * eps).shape}")
         return mu + std * eps
 
     def decoder(self, z):
@@ -126,15 +106,12 @@ class VAE(nn.Module):
         # z is fed back into a fully-connected layers and then into two transpose convolutional layers
         # The generated output is the same size of the original input
         x = F.relu(self.decFC1(z))
-        print(f"decoder started, x size : {x.shape}")
+        #print(f"decoder started, x size : {x.shape}")
         x = self.unflatten(x)
-        print(f"unflatten x : {x.shape}")
-        '''
-        x = F.relu(self.decConv1(x))
-        x = torch.sigmoid(self.decConv2(x))
-        '''
+        #print(f"unflatten x : {x.shape}")
         x = self.decConv(x)
-        print(f"decoder ended, x size : {x.shape}")
+        x = self.resize(x)
+        #print(f"decoder output size : {x.shape}")
         return x
 
     def forward(self, x):
@@ -144,7 +121,7 @@ class VAE(nn.Module):
         mu, logVar = self.encoder(x)
         z = self.reparameterize(mu, logVar)
         out = self.decoder(z)
-        return out, mu, logVar
+        return (out, mu, logVar)
 
 def get_input(path, file):
     video_npy = np.load(os.path.join(path,file))
@@ -157,11 +134,6 @@ def get_input(path, file):
     contour = round(vread.size(dim=0)/2)
     #input = [vread[0:contour], vread[contour:contour*2], vread[contour*2:]]
     input = [vread[0:contour], vread[contour:]]
-    '''
-    print(vread.size())
-    for i in range(len(input)):
-        print(input[i].size())
-    '''
     #print(len(input))
     return input
 
@@ -191,18 +163,13 @@ for epoch in range(num_epochs):
         input = get_input(data_path, data)
         for set in range(len(input)):
             input[set] = input[set].to(device)
-            print(f"original input(x) size : {input[set].shape}")
-            '''
-            frame_num = input[set].size(dim=0)
-            net.set_featuredim(frame_num, zDim=256)
-            '''
+            #print(f"original input(x) size : {input[set].shape}")
             # Feeding a batch of images into the network to obtain the output image, mu, and logVar
             out, mu, logVar = net(input[set])
             # The loss is the BCE loss combined with the KL divergence to ensure the distribution is learnt
             kl_divergence = 0.5 * torch.sum(-1 - logVar + mu.pow(2) + logVar.exp())
             loss = F.binary_cross_entropy(out, input[set], size_average=False) + kl_divergence
             # Backpropagation based on the loss
-            optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
