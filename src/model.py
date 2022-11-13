@@ -75,15 +75,13 @@ class ConvAutoencoder(nn.Module):
             ConvBlock(64, 64, 3, 1, 1, 2),
             nn.Conv2d(64, 2, 1, 1, 0)
         )
-
         self.decoder = nn.Sequential(
             nn.Conv2d(2, 64, 1, 1, 0),
-            nn.ConvTranspose2d(64, 32, kernel_size = 3, stride = 2, padding = 2),
+            nn.ConvTranspose2d(64, 32, kernel_size=3, stride=2, padding=2),
             nn.ReLU(),
-            nn.ConvTranspose2d(32, 3, kernel_size = 3, stride = 2, padding = 2),
+            nn.ConvTranspose2d(32, 3, kernel_size=3, stride=2, padding=2),
             nn.Sigmoid()
         )
-        
         self.decoder_resize = T.Resize(size=original_size)
 
     def forward(self, x): # x: (B, 3, 270, 480)
@@ -92,6 +90,39 @@ class ConvAutoencoder(nn.Module):
         decoder_out = self.decoder_resize(decoder_out)
         return latent, decoder_out
     
+    def get_latent(self, x): # Not Train
+        self.eval()
+        with torch.no_grad():
+            return self.encoder(x)
+
+class ConvAutoencoderV2(nn.Module):
+    def __init__(self):
+        super().__init__()
+        # Encoder
+        self.encoder = nn.Sequential(
+            ConvBlock(3, 16, 7, 1, 1, 2),
+            ConvBlock(16, 32, 3, 1, 1, 2),
+            ConvBlock(32, 64, 3, 1, 1, 2),
+            nn.Conv2d(64, 2, 1, 1, 0)
+        )
+
+        # Decoder
+        self.decoder = nn.Sequential(
+            nn.Conv2d(2, 64, 1, 1, 0),
+            nn.ConvTranspose2d(64, 32, kernel_size=2, stride=2, padding=0),
+            nn.ReLU(),
+            nn.ConvTranspose2d(32, 16, kernel_size=2, stride=2, padding=0),
+            nn.ReLU(),
+            T.Resize(size=(135, 240)),
+            nn.ConvTranspose2d(16, 3, kernel_size=2, stride=2, padding=0),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x): # x: (B, 3, 270, 480)
+        latent = self.encoder(x)
+        decoder_out = self.decoder(latent)
+        return latent, decoder_out
+
     def get_latent(self, x): # Not Train
         self.eval()
         with torch.no_grad():
