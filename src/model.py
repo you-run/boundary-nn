@@ -143,6 +143,8 @@ class VariationalConvAutoencoder(nn.Module):
         )
         self.resize = T.Resize(size=(270,480))
 
+        self.z_dim = z_dim
+
     def encoding(self, x):
         # Input is fed into 2 convolutional layers sequentially
         # The output feature map are fed into 2 fully-connected layers to predict mean (mu) and variance (logVar)

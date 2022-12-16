@@ -37,14 +37,15 @@ def train_one_epoch_ae(model, optimizer, criterion, dataloader, device):
 def train_one_epoch_vae(model, optimizer, criterion, dataloader, device):
     model.train()
 
-    losses = []    
+    losses = []
     for x in dataloader:
         x = x.to(device)
         (mu, log_var), decoder_out = model(x)
 
         optimizer.zero_grad()
-        kl_divergence = 0.5 * torch.sum(-1 - log_var + mu.pow(2) + log_var.exp())
-        loss = F.binary_cross_entropy(decoder_out, x, reduction='sum') + kl_divergence
+        kl_divergence = torch.mean(-0.5 * torch.sum(1 + log_var - mu ** 2 - log_var.exp(), dim = 1), dim = 0)
+        bce_loss = F.binary_cross_entropy(decoder_out, x)
+        loss = kl_divergence + bce_loss
         loss.backward()
         optimizer.step()
 
