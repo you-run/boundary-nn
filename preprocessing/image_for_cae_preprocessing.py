@@ -26,6 +26,6 @@ for n, file_path in enumerate(file_path_list):
     
     video_data = skvideo.io.vread(file_path)[20:-20, ...]
     for i, frame in enumerate(video_data):
-        frame_name = f"{video_name}_{i}.png" # HB_1_i.png
+        frame_name = f"{video_name}_{i+20}.png" # HB_1_i.png
         im = Image.fromarray(frame)
         im.save(os.path.join(frame_save_dir_path, frame_name))
