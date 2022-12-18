@@ -12,7 +12,6 @@ from loss import LOSS_DICT
 from optimizer import OPTIM_DICT
 
 def set_figure_options():
-    plt.rcParams['font.family'] = "Helvetica"
     plt.rcParams['axes.spines.top'] = False
     plt.rcParams['axes.spines.right'] = False
     plt.rcParams['legend.frameon'] = False
