@@ -26,7 +26,7 @@ class Interpolate(nn.Module):
         return x
 
 
-class ConvBlock(nn.Module):
+class ConvDownBlock(nn.Module):
     def __init__(
         self, in_channels, out_channels,
         kernel_size=3, stride=1, padding=1, pool_size=2
@@ -51,16 +51,82 @@ class ConvBlock(nn.Module):
         return out
 
 
+class ConvUpBlock(nn.Module):
+    def __init__(
+        self, in_channels, out_channels,
+        kernel_size=3, stride=1, padding=1, pool_size=2
+    ):
+        super().__init__()
+        self.conv = nn.ConvTranspose2d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            padding=padding
+        )
+        self.bn = nn.BatchNorm2d(num_features=out_channels)
+        self.act = nn.ReLU()
+        self.pool = nn.Upsample(scale_factor=pool_size)
+
+    def forward(self, x):
+        out = self.conv(x)
+        out = self.bn(out)
+        out = self.act(out)
+        out = self.pool(out)
+        return out
+
+
+class ResDownBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size=3):
+        super().__init__()
+        self.act = nn.ReLU()
+        self.res_conv = nn.Conv2d(in_channels, out_channels, kernel_size, 2, kernel_size // 2)
+
+        self.conv1 = nn.Conv2d(in_channels, out_channels // 2, kernel_size, 2, kernel_size // 2)
+        self.bn1 = nn.BatchNorm2d(out_channels // 2, eps=1e-4)
+        self.conv2 = nn.Conv2d(out_channels // 2, out_channels, kernel_size, 1, kernel_size // 2)
+        self.bn2 = nn.BatchNorm2d(out_channels, eps=1e-4)
+
+    def forward(self, x):
+        out = self.act(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+        out += self.res_conv(x)
+        out = self.act(out)
+        return out
+
+
+class ResUpBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size=3, scale_factor=2):
+        super().__init__()
+        self.conv1 = nn.Conv2d(in_channels, out_channels // 2, kernel_size, 1, kernel_size // 2)
+        self.bn1 = nn.BatchNorm2d(out_channels // 2, eps=1e-4)
+        self.conv2 = nn.Conv2d(out_channels // 2, out_channels, kernel_size, 1, kernel_size // 2)
+        self.bn2 = nn.BatchNorm2d(out_channels, eps=1e-4)
+
+        self.upsample = nn.Upsample(scale_factor=scale_factor, mode="nearest")
+        self.res_conv = nn.Conv2d(in_channels, out_channels, kernel_size, 1, kernel_size // 2)
+
+        self.act = nn.ELU()
+
+    def forward(self, x):
+        x = self.upsample(x)
+        out = self.act(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+        out += self.res_conv(x)
+        out = self.act(out)
+        return out
+
+
 class ConvAutoencoder(nn.Module, ModuleUtils):
     def __init__(self, latent_dim=3, original_size=(270, 480)):
         super().__init__()
         # encoder
         self.latent_dim = latent_dim
         self.encoder = nn.Sequential(
-            ConvBlock(3, 16, 7, 1, 1, 2),
-            ConvBlock(16, 32, 3, 1, 1, 2),
-            ConvBlock(32, 64, 3, 1, 1, 2),
-            ConvBlock(64, 64, 3, 1, 1, 2),
+            ConvDownBlock(3, 16, 7, 1, 1, 2),
+            ConvDownBlock(16, 32, 3, 1, 1, 2),
+            ConvDownBlock(32, 64, 3, 1, 1, 2),
+            ConvDownBlock(64, 64, 3, 1, 1, 2),
             nn.Conv2d(64, 2, 1, 1, 0)
         )
         self.decoder = nn.Sequential(
@@ -89,10 +155,10 @@ class ConvAutoencoderV2(nn.Module, ModuleUtils):
         # Encoder
         self.latent_dim = latent_dim
         self.encoder = nn.Sequential(
-            ConvBlock(3, 8, 7, 1, 1, 2),
-            ConvBlock(8, 16, 3, 1, 1, 2),
-            ConvBlock(16, 32, 3, 1, 1, 2),
-            ConvBlock(32, 64, 3, 1, 1, 2),
+            ConvDownBlock(3, 8, 7, 1, 1, 2),
+            ConvDownBlock(8, 16, 3, 1, 1, 2),
+            ConvDownBlock(16, 32, 3, 1, 1, 2),
+            ConvDownBlock(32, 64, 3, 1, 1, 2),
             nn.Conv2d(64, 3, 1, 1, 0)
         )
 
@@ -123,15 +189,15 @@ class ConvAutoencoderV2(nn.Module, ModuleUtils):
             return self.encoder(x)
 
 
-class VariationalConvAutoencoder(nn.Module, ModuleUtils):
+class ConvVAE(nn.Module, ModuleUtils):
     def __init__(self, feature_dim=2 * 16 * 29, z_dim=512):
         super().__init__()
         # Initializing the 2 convolutional layers and 2 full-connected layers for the encoder
         self.encoder = nn.Sequential(
-            ConvBlock(3, 16, 7, 1, 1, 2),
-            ConvBlock(16, 32, 3, 1, 1, 2),
-            ConvBlock(32, 64, 3, 1, 1, 2),
-            ConvBlock(64, 64, 3, 1, 1, 2),
+            ConvDownBlock(3, 16, 7, 1, 1, 2),
+            ConvDownBlock(16, 32, 3, 1, 1, 2),
+            ConvDownBlock(32, 64, 3, 1, 1, 2),
+            ConvDownBlock(64, 64, 3, 1, 1, 2),
             nn.Conv2d(64, 2, 1, 1, 0) 
         )
         self.flatten = nn.Flatten()
@@ -183,13 +249,64 @@ class VariationalConvAutoencoder(nn.Module, ModuleUtils):
         # The entire pipeline of the VAE: encoder -> reparameterization -> decoder
         # output, mu, and logVar are returned for loss computation
         mu, log_var = self.encoding(x)
-        z = self.reparameterize(mu, log_var)
+        if self.training:
+            z = self.reparameterize(mu, log_var)
+        else:
+            z = mu
         decoder_out = self.decoding(z)
         return (mu, log_var), decoder_out
+
+
+class ResidualConvVAE(nn.Module, ModuleUtils):
+    def __init__(self, latent_dim=256):
+        super().__init__()
+        self.encoder = nn.Sequential(
+            ConvDownBlock(3, 64, 7, 2, 3),
+            ResDownBlock(64, 128),
+            ResDownBlock(128, 256),
+            ResDownBlock(256, 512),
+            ResDownBlock(512, 1024),
+            nn.AvgPool2d(kernel_size=(1, 2))
+        )
+        self.enc_conv_mu = nn.Conv2d(1024, latent_dim, 4, 1)
+        self.enc_conv_log_var = nn.Conv2d(1024, latent_dim, 4, 1)
+
+        self.decoder = nn.Sequential(
+            nn.ConvTranspose2d(latent_dim, 1024, 4, 1),
+            nn.Linear(4, 8),
+            ResUpBlock(1024, 512),
+            ResUpBlock(512, 256),
+            ResUpBlock(256, 128),
+            ResUpBlock(128, 64),
+            ConvUpBlock(64, 3, 4, 2, 1)
+        )
+        self.latent_dim = latent_dim
+
+    def encoding(self, x):
+        x = self.encoder(x)
+        mu = self.enc_conv_mu(x).squeeze()
+        log_var = self.enc_conv_log_var(x).squeeze()
+        return mu, log_var
+
+    def reparameterize(self, mu, log_var):
+        std = torch.exp(log_var / 2)
+        eps = torch.randn_like(std)
+        return mu + std * eps
+
+    def forward(self, x):
+        mu, log_var = self.encoding(x)
+        if self.training:
+            z = self.reparameterize(mu, log_var)
+        else:
+            z = mu
+        z = z.reshape(*z.shape, 1, 1)
+        recon = self.decoder(z)
+        return (mu, log_var), recon
 
 
 MODEL_DICT = {
     'ae': ConvAutoencoder, 
     'ae-v2': ConvAutoencoderV2, 
-    'vae': VariationalConvAutoencoder, 
+    'vae': ConvVAE,
+    'resvae': ResidualConvVAE
 }
