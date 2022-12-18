@@ -153,7 +153,7 @@ if __name__ == "__main__":
     recon_dataset = torch.stack([eval_dataset[len(eval_dataset) // (i + 2)] for i in range(5)])
 
     # Model, Criterion, Optimizer
-    model = MODEL_DICT[args.model]().to(device)
+    model = MODEL_DICT[args.model](in_channels=args.in_channels, latent_dim=args.latent_dim).to(device)
     criterion = LOSS_DICT[args.loss]() if 'vae' in args.model else nn.MSELoss()
     optimizer = OPTIM_DICT[args.optim](model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     train_one_epoch = train_one_epoch_vae if 'vae' in args.model else train_one_epoch_ae

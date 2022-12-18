@@ -47,6 +47,14 @@ def get_args():
         choices=tuple(MODEL_DICT.keys()), default='ae'
     )
     parser.add_argument(
+        '--in-channels', '-C', type=int,
+        default=64
+    )
+    parser.add_argument(
+        '--latent-dim', '-LD', type=int,
+        default=256
+    )
+    parser.add_argument(
         '--loss', '-L', type=str,
         choices=tuple(LOSS_DICT.keys()), default='kld_bce'
     )

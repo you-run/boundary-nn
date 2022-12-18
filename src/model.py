@@ -13,6 +13,12 @@ class ModuleUtils:
     def dtype(self):
         return next(self.parameters()).dtype
 
+    @staticmethod
+    def reparameterize(mu, log_var):
+        std = torch.exp(log_var / 2)
+        eps = torch.randn_like(std)
+        return mu + std * eps
+
 
 class Interpolate(nn.Module):
     def __init__(self, size, mode='nearest'):
@@ -79,7 +85,7 @@ class ConvUpBlock(nn.Module):
 class ResDownBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3):
         super().__init__()
-        self.act = nn.ReLU()
+        self.act = nn.ELU()
         self.res_conv = nn.Conv2d(in_channels, out_channels, kernel_size, 2, kernel_size // 2)
 
         self.conv1 = nn.Conv2d(in_channels, out_channels // 2, kernel_size, 2, kernel_size // 2)
@@ -98,15 +104,14 @@ class ResDownBlock(nn.Module):
 class ResUpBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, scale_factor=2):
         super().__init__()
+        self.act = nn.ELU()
+        self.upsample = nn.Upsample(scale_factor=scale_factor, mode="nearest")
+        self.res_conv = nn.Conv2d(in_channels, out_channels, kernel_size, 1, kernel_size // 2)
+
         self.conv1 = nn.Conv2d(in_channels, out_channels // 2, kernel_size, 1, kernel_size // 2)
         self.bn1 = nn.BatchNorm2d(out_channels // 2, eps=1e-4)
         self.conv2 = nn.Conv2d(out_channels // 2, out_channels, kernel_size, 1, kernel_size // 2)
         self.bn2 = nn.BatchNorm2d(out_channels, eps=1e-4)
-
-        self.upsample = nn.Upsample(scale_factor=scale_factor, mode="nearest")
-        self.res_conv = nn.Conv2d(in_channels, out_channels, kernel_size, 1, kernel_size // 2)
-
-        self.act = nn.ELU()
 
     def forward(self, x):
         x = self.upsample(x)
@@ -118,7 +123,7 @@ class ResUpBlock(nn.Module):
 
 
 class ConvAutoencoder(nn.Module, ModuleUtils):
-    def __init__(self, latent_dim=3, original_size=(270, 480)):
+    def __init__(self, latent_dim=3, original_size=(270, 480), *args, **kwargs):
         super().__init__()
         # encoder
         self.latent_dim = latent_dim
@@ -150,7 +155,7 @@ class ConvAutoencoder(nn.Module, ModuleUtils):
             return self.encoder(x)
 
 class ConvAutoencoderV2(nn.Module, ModuleUtils):
-    def __init__(self, latent_dim=3, original_size=(270, 480)):
+    def __init__(self, latent_dim=3, original_size=(270, 480), *args, **kwargs):
         super().__init__()
         # Encoder
         self.latent_dim = latent_dim
@@ -190,7 +195,7 @@ class ConvAutoencoderV2(nn.Module, ModuleUtils):
 
 
 class ConvVAE(nn.Module, ModuleUtils):
-    def __init__(self, feature_dim=2 * 16 * 29, z_dim=512):
+    def __init__(self, feature_dim=2 * 16 * 29, latent_dim=512, *args, **kwargs):
         super().__init__()
         # Initializing the 2 convolutional layers and 2 full-connected layers for the encoder
         self.encoder = nn.Sequential(
@@ -202,11 +207,11 @@ class ConvVAE(nn.Module, ModuleUtils):
         )
         self.flatten = nn.Flatten()
         
-        self.enc_fc_mu = nn.Linear(feature_dim, z_dim)
-        self.enc_fc_var = nn.Linear(feature_dim, z_dim)
+        self.enc_fc_mu = nn.Linear(feature_dim, latent_dim)
+        self.enc_fc_var = nn.Linear(feature_dim, latent_dim)
 
         # Inxitializing the fully-connected layer and 2 convolutional layers for decoder
-        self.dec_fc = nn.Linear(z_dim, feature_dim)
+        self.dec_fc = nn.Linear(latent_dim, feature_dim)
         self.unflatten = nn.Unflatten(1, (2, 16, 29))
         self.decoder = nn.Sequential(
             nn.Conv2d(2, 64, 1, 1, 0),
@@ -218,8 +223,7 @@ class ConvVAE(nn.Module, ModuleUtils):
             nn.Sigmoid()
         )
         self.resize = T.Resize(size=(270,480))
-
-        self.z_dim = z_dim
+        self.latent_dim = latent_dim
 
     def encoding(self, x):
         # Input is fed into 2 convolutional layers sequentially
@@ -229,12 +233,6 @@ class ConvVAE(nn.Module, ModuleUtils):
         mu = self.enc_fc_mu(x)
         log_var = self.enc_fc_var(x)
         return mu, log_var
-         
-    def reparameterize(self, mu, log_var):
-        #Reparameterization takes in the input mu and logVar and sample the mu + std * eps
-        std = torch.exp(log_var / 2)
-        eps = torch.randn_like(std)
-        return mu + std * eps
 
     def decoding(self, z):
         # z is fed back into a fully-connected layers and then into two transpose convolutional layers
@@ -258,27 +256,27 @@ class ConvVAE(nn.Module, ModuleUtils):
 
 
 class ResidualConvVAE(nn.Module, ModuleUtils):
-    def __init__(self, latent_dim=256):
+    def __init__(self, in_channels=64, latent_dim=256, *args, **kwargs):
         super().__init__()
         self.encoder = nn.Sequential(
-            ConvDownBlock(3, 64, 7, 2, 3),
-            ResDownBlock(64, 128),
-            ResDownBlock(128, 256),
-            ResDownBlock(256, 512),
-            ResDownBlock(512, 1024),
-            nn.AvgPool2d(kernel_size=(1, 2))
+            ConvDownBlock(3, in_channels, 7, 2, 3),
+            ResDownBlock(in_channels, in_channels * 2),
+            ResDownBlock(in_channels * 2, in_channels * 4),
+            ResDownBlock(in_channels * 4, in_channels * 8),
+            ResDownBlock(in_channels * 8, in_channels * 16),
+            nn.Linear(8, 4)
         )
-        self.enc_conv_mu = nn.Conv2d(1024, latent_dim, 4, 1)
-        self.enc_conv_log_var = nn.Conv2d(1024, latent_dim, 4, 1)
+        self.enc_conv_mu = nn.Conv2d(in_channels * 16, latent_dim, 4, 1)
+        self.enc_conv_log_var = nn.Conv2d(in_channels * 16, latent_dim, 4, 1)
 
         self.decoder = nn.Sequential(
-            nn.ConvTranspose2d(latent_dim, 1024, 4, 1),
+            nn.ConvTranspose2d(latent_dim, in_channels * 16, 4, 1),
             nn.Linear(4, 8),
-            ResUpBlock(1024, 512),
-            ResUpBlock(512, 256),
-            ResUpBlock(256, 128),
-            ResUpBlock(128, 64),
-            ConvUpBlock(64, 3, 4, 2, 1),
+            ResUpBlock(in_channels * 16, in_channels * 8),
+            ResUpBlock(in_channels * 8, in_channels * 4),
+            ResUpBlock(in_channels * 4, in_channels * 2),
+            ResUpBlock(in_channels * 2, in_channels),
+            ConvUpBlock(in_channels, 3, 4, 2, 1),
             nn.Sigmoid()
         )
         self.latent_dim = latent_dim
@@ -288,11 +286,6 @@ class ResidualConvVAE(nn.Module, ModuleUtils):
         mu = self.enc_conv_mu(x).squeeze()
         log_var = self.enc_conv_log_var(x).squeeze()
         return mu, log_var
-
-    def reparameterize(self, mu, log_var):
-        std = torch.exp(log_var / 2)
-        eps = torch.randn_like(std)
-        return mu + std * eps
 
     def forward(self, x):
         mu, log_var = self.encoding(x)
