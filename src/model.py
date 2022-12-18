@@ -4,6 +4,16 @@ import torch.nn.functional as F
 import torchvision.transforms as T
 
 
+class ModuleUtils:
+    @property
+    def device(self):
+        return next(self.parameters()).device
+
+    @property
+    def dtype(self):
+        return next(self.parameters()).dtype
+
+
 class Interpolate(nn.Module):
     def __init__(self, size, mode='nearest'):
         super(Interpolate, self).__init__()
@@ -41,7 +51,7 @@ class ConvBlock(nn.Module):
         return out
 
 
-class ConvAutoencoder(nn.Module):
+class ConvAutoencoder(nn.Module, ModuleUtils):
     def __init__(self, latent_dim=3, original_size=(270, 480)):
         super().__init__()
         # encoder
@@ -73,7 +83,7 @@ class ConvAutoencoder(nn.Module):
         with torch.no_grad():
             return self.encoder(x)
 
-class ConvAutoencoderV2(nn.Module):
+class ConvAutoencoderV2(nn.Module, ModuleUtils):
     def __init__(self, latent_dim=3, original_size=(270, 480)):
         super().__init__()
         # Encoder
@@ -113,8 +123,8 @@ class ConvAutoencoderV2(nn.Module):
             return self.encoder(x)
 
 
-class VariationalConvAutoencoder(nn.Module):
-    def __init__(self, feature_dim=2 * 16 * 29, z_dim=256):
+class VariationalConvAutoencoder(nn.Module, ModuleUtils):
+    def __init__(self, feature_dim=2 * 16 * 29, z_dim=512):
         super().__init__()
         # Initializing the 2 convolutional layers and 2 full-connected layers for the encoder
         self.encoder = nn.Sequential(
@@ -176,3 +186,10 @@ class VariationalConvAutoencoder(nn.Module):
         z = self.reparameterize(mu, log_var)
         decoder_out = self.decoding(z)
         return (mu, log_var), decoder_out
+
+
+MODEL_DICT = {
+    'ae': ConvAutoencoder, 
+    'ae-v2': ConvAutoencoderV2, 
+    'vae': VariationalConvAutoencoder, 
+}

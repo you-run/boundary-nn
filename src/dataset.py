@@ -5,10 +5,13 @@ from torch.utils.data import Dataset, DataLoader
 
 
 class VideoFrameDataset(Dataset):
-    def __init__(self, root_dir, transform=None, debug=False):
+    def __init__(self, root_dir, transform=None, train=True, debug=False):
         super().__init__()
         self.root_dir = root_dir # .../video_frame
-        self.data_path = glob.glob(root_dir + "/**/*.png", recursive=True)
+        self.data_path = list(filter(
+            lambda x: (int(x[:-4].split("_")[-1])) % 2 == (0 if train else 1),
+            glob.glob(root_dir + "/**/*.png", recursive=True)
+        ))
         self.transform = transform
         if debug:
             self.data_path = self.data_path[:(len(self.data_path) // 10)]
@@ -31,8 +34,10 @@ class SequentialVideoFrameDataset:
 
     def get_video_frames(self, name="HB_1"):
         video_type = name.split("_")[0] # HB
-        data_path = glob.glob(self.root_dir + f"/{video_type}/{name}/*.png", recursive=True)
-        data_path = sorted(data_path, key=lambda x: int(x[:-4].split("_")[-1]))
+        data_path = sorted(
+            glob.glob(self.root_dir + f"/{video_type}/{name}/*.png", recursive=True),
+            key=lambda x: int(x[:-4].split("_")[-1])
+        )
         assert len(data_path) != 0, f"Not a valid video name: {name}"
 
         if self.debug:
@@ -65,16 +70,16 @@ if __name__ == "__main__":
         ),
     ])
 
-    # dataset = VideoFrameDataset('../data/video_frame/', transform=transform)
-    # dataloader = DataLoader(dataset, batch_size=4, shuffle=True, num_workers=1)
+    dataset = VideoFrameDataset('../data/video_frame/', transform=transform, train=False)
+    dataloader = DataLoader(dataset, batch_size=4, shuffle=True, num_workers=1)
 
-    # for x in dataloader:
-    #     print(x.shape)
-    #     assert 0 
+    for x in dataloader:
+        print(x.shape)
+        assert 0
 
-    dataset = SequentialVideoFrameDataset('../data/video_frame/', transform=transform)
-    ret = dataset(name="HB_1")
-    print(ret.shape)
+    # dataset = SequentialVideoFrameDataset('../data/video_frame/', transform=transform)
+    # ret = dataset(name="HB_1")
+    # print(ret.shape)
 
     # tf = T.ToPILImage()
     # for i, r in enumerate(ret):

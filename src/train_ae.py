@@ -1,5 +1,6 @@
 import os
 import json
+from pathlib import Path
 from datetime import datetime
 
 import numpy as np
@@ -12,49 +13,61 @@ from torchvision.transforms.functional import to_pil_image
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-from utils import get_args
+from utils import get_args, get_systme_info, set_figure_options, set_seed, configure_cudnn
 from dataset import VideoFrameDataset
-from model import ConvAutoencoder, ConvAutoencoderV2, VariationalConvAutoencoder
+from model import MODEL_DICT
+from loss import LOSS_DICT
+from optimizer import OPTIM_DICT
 
-def train_one_epoch_ae(model, optimizer, criterion, dataloader, device):
+def train_one_epoch_ae(model, dataloader, optimizer, criterion):
     model.train()
 
     losses = []    
     for x in dataloader:
-        x = x.to(device)
-        _, decoder_out = model(x)
+        x = x.to(model.device)
+        _, preds = model(x)
 
         optimizer.zero_grad()
-        loss = criterion(decoder_out, x)
+        loss = criterion(preds, x)
         loss.backward()
         optimizer.step()
 
-        # Logging
         losses.append(loss.detach().cpu().item())
 
     return np.mean(losses)
 
-def train_one_epoch_vae(model, optimizer, criterion, dataloader, device):
+def train_one_epoch_vae(model, dataloader, optimizer, criterion):
     model.train()
 
     losses = []
     for x in dataloader:
-        x = x.to(device)
-        (mu, log_var), decoder_out = model(x)
+        x = x.to(model.device)
+        (mu, log_var), preds = model(x)
 
         optimizer.zero_grad()
-        kl_divergence = torch.mean(-0.5 * torch.sum(1 + log_var - mu ** 2 - log_var.exp(), dim = 1), dim = 0)
-        bce_loss = F.binary_cross_entropy(decoder_out, x)
-        loss = kl_divergence + bce_loss
+        loss = criterion(preds, x, mu, log_var)
         loss.backward()
         optimizer.step()
 
-        # Logging
         losses.append(loss.detach().cpu().item())
 
     return np.mean(losses)
 
-def eval(model, eval_dataset, epoch, log_path, device): # dataset : example dataset
+def eval_vae(model, dataloader, criterion=None):
+    model.eval()
+
+    losses = []
+    with torch.no_grad():
+        for x in dataloader:
+            x = x.to(model.device)
+            (mu, log_var), preds = model(x)
+
+            loss = criterion(preds, x, mu, log_var)
+            losses.append(loss.detach().cpu().item())
+
+    return np.mean(losses)
+
+def recon_and_plot(model, recon_dataset, epoch, log_path): # dataset : example dataset
     def show_bef_aft(ax, bef, aft): # ax = (ax1, ax2)
         ax[0].imshow(to_pil_image(bef, mode='RGB'))
         ax[0].set_title("Original")
@@ -63,69 +76,84 @@ def eval(model, eval_dataset, epoch, log_path, device): # dataset : example data
 
     model.eval()
     with torch.no_grad():
-        _, decoder_out = model(eval_dataset.to(device))
-        decoder_out = decoder_out.detach().cpu()
+        _, preds = model(recon_dataset.to(model.device))
+        preds = preds.detach().cpu()
     
-    plot_len = len(eval_dataset) # dataset: (N, 3, 270, 480)
+    plot_len = len(recon_dataset) # dataset: (N, 3, H, W)
     fig, ax = plt.subplots(plot_len, 2)
     for i in range(plot_len):
-        show_bef_aft(ax[i], eval_dataset[i, ...], decoder_out[i, ...])
+        show_bef_aft(ax[i], recon_dataset[i, ...], preds[i, ...])
     fig.suptitle(f"Before & After at epoch {epoch}")
     plt.savefig(os.path.join(log_path, 'recon', f"epoch_{epoch}.png"))
 
-def plot_progress(args, losses, log_path):
-    fig, ax = plt.subplots(1, 1, figsize=(4, 4))
-    ax.set_title("Train Loss")
-    ax.plot(losses)
+def plot_progress(train_losses, eval_losses, eval_step, log_path):
+    fig, ax = plt.subplots(1, 1, figsize=(6, 6), dpi=150)
+    train_x = np.arange(len(train_losses)) + 1
+    eval_x = np.arange(eval_step, len(train_losses) + 1, eval_step)
+
+    ax.set_title("Loss")
+    ax.plot(train_x, train_losses, label="Train")
+    ax.plot(eval_x, eval_losses, label="Eval")
     ax.set_xlabel("Epoch")
     ax.set_ylabel("Loss")
-    plt.savefig(os.path.join(log_path, f"train_loss.png"))
+    ax.legend()
+    plt.savefig(os.path.join(log_path, f"loss.png"))
 
 
 if __name__ == "__main__":
+    # Settings
     args = get_args()
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Current device: {device}")
+    set_figure_options()
+    set_seed(seed=args.seed)
+    configure_cudnn(debug=args.debug)
+
+    device, num_workers = get_systme_info()
+    print(f"Device: {device} | Seed: {args.seed} | Debug: {args.debug}")
+    print(args)
 
     # Dataset & Dataloader
-    dataset = VideoFrameDataset(
+    train_dataset = VideoFrameDataset(
         args.data_dir,
         transform=transforms.Compose([
-            transforms.Resize(size=(270, 480)),
+            transforms.Resize(size=tuple(args.img_size)),
             transforms.ToTensor(),
-            # transforms.Normalize(
-            #     mean=[0.485, 0.456, 0.406],
-            #     std=[0.229, 0.224, 0.225]
-            # ),
         ]),
+        train=True,
         debug=args.debug
     )
-    eval_dataset = torch.stack([dataset[len(dataset) // (i + 2)] for i in range(5)])
-    dataloader = DataLoader(
-        dataset,
+    train_dataloader = DataLoader(
+        train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
-        num_workers=4
+        num_workers=num_workers
     )
 
-    # Model, Utils
-    if args.model == 'ae':
-        model = ConvAutoencoder().to(device)
-        train_one_epoch = train_one_epoch_ae
-        criterion = nn.MSELoss()
-    if args.model == 'ae-v2':
-        model = ConvAutoencoderV2().to(device)
-        train_one_epoch = train_one_epoch_ae
-        criterion = nn.MSELoss()
-    elif args.model == 'vae':
-        model = VariationalConvAutoencoder().to(device)
-        train_one_epoch = train_one_epoch_vae
-        criterion = None # Substitute with KL Divergence + BCELoss
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    eval_dataset = VideoFrameDataset(
+        args.data_dir,
+        transform=transforms.Compose([
+            transforms.Resize(size=tuple(args.img_size)),
+            transforms.ToTensor()
+        ]),
+        train=False,
+        debug=args.debug
+    )
+    eval_dataloader = DataLoader(
+        eval_dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=num_workers
+    )
 
-    ### For logging
-    train_losses = []
-    log_path = f"../log/{datetime.today().strftime('%b%d_%H:%M')}_{args.model}"
+    recon_dataset = torch.stack([eval_dataset[len(eval_dataset) // (i + 2)] for i in range(5)])
+
+    # Model, Criterion, Optimizer
+    model = MODEL_DICT[args.model]().to(device)
+    criterion = LOSS_DICT[args.loss]() if 'vae' in args.model else nn.MSELoss()
+    optimizer = OPTIM_DICT[args.optim](model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    train_one_epoch = train_one_epoch_vae if 'vae' in args.model else train_one_epoch_ae
+
+    # Logging
+    log_path = f"../log/{datetime.today().strftime('%b%d_%H:%M:%S')}_{args.model}"
     os.makedirs(log_path, exist_ok=True)
     os.makedirs(os.path.join(log_path, 'recon'), exist_ok=True)
     with open(os.path.join(log_path, 'hps.txt'), 'w') as f: # Save h.p.s
@@ -133,19 +161,23 @@ if __name__ == "__main__":
     with open(os.path.join(log_path, 'model.txt'), 'w') as f: # Save model structure
         f.write(model.__str__())
 
-    # Start training
+    # Training & Evaluation
     best_loss = float('inf')
+    train_losses = []
+    eval_losses = []
     for epoch in tqdm(range(args.epochs)):
-        train_loss = train_one_epoch(model, optimizer, criterion, dataloader, device)
+        train_loss = train_one_epoch(model, train_dataloader, optimizer, criterion)
         train_losses.append(train_loss)
         if (epoch + 1) % args.eval_step == 0:
-            eval(model, eval_dataset, epoch + 1, log_path, device)
-            print(f"[Epoch {epoch + 1}/{args.epochs}] Train loss: {train_loss:.5f} | Best loss: {best_loss:.5f}")
-            plot_progress(args, train_losses, log_path)
-        if best_loss > train_loss:
-            best_loss = train_loss
-            torch.save(model.state_dict(), os.path.join(log_path, f"{args.model}_best.pt"))
-            print(f"Best model at Epoch {epoch + 1}/{args.epochs}, Best train loss: {best_loss:.5f}")
+            eval_loss = eval_vae(model, eval_dataloader, criterion)
+            eval_losses.append(eval_loss)
+            if best_loss > eval_loss:
+                best_loss = eval_loss
+                torch.save(model.state_dict(), os.path.join(log_path, f"{args.model}_best.pt"))
+                print(f"Best model at Epoch {epoch + 1}/{args.epochs}, Best eval loss: {best_loss:.5f}")
+            recon_and_plot(model, recon_dataset, epoch + 1, log_path)
+            print(f"[Epoch {epoch + 1}/{args.epochs}] Train loss: {train_loss:.5f} | Eval loss: {eval_loss:.5f} | Best loss: {best_loss:.5f}")
+            plot_progress(train_losses, eval_losses, args.eval_step, log_path)
 
     # Plotting
     torch.save(model.state_dict(), os.path.join(log_path, f"{args.model}_final.pt"))
