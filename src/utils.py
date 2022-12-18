@@ -87,6 +87,10 @@ def get_args():
         default=0
     )
     parser.add_argument(
+        '--use-amp', '-AMP', type=bool,
+        default=False
+    )
+    parser.add_argument(
         '--debug', type=bool,
         default=False
     )

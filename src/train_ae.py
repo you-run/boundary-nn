@@ -19,51 +19,57 @@ from model import MODEL_DICT
 from loss import LOSS_DICT
 from optimizer import OPTIM_DICT
 
-def train_one_epoch_ae(model, dataloader, optimizer, criterion):
-    model.train()
-
-    losses = []    
-    for x in dataloader:
-        x = x.to(model.device)
-        _, preds = model(x)
-
-        optimizer.zero_grad()
-        loss = criterion(preds, x)
-        loss.backward()
-        optimizer.step()
-
-        losses.append(loss.detach().cpu().item())
-
-    return np.mean(losses)
-
-def train_one_epoch_vae(model, dataloader, optimizer, criterion):
+def train_one_epoch_ae(model, dataloader, optimizer, criterion, scaler):
     model.train()
 
     losses = []
     for x in dataloader:
         x = x.to(model.device)
-        (mu, log_var), preds = model(x)
+        with torch.cuda.amp.autocast():
+            _, preds = model(x)
+            loss = criterion(preds, x)
 
         optimizer.zero_grad()
-        loss = criterion(preds, x, mu, log_var)
-        loss.backward()
-        optimizer.step()
+        scaler.scale(loss).backward()
+        scaler.unscale_(optimizer)
+        scaler.step(optimizer)
+        scaler.update()
 
         losses.append(loss.detach().cpu().item())
 
     return np.mean(losses)
 
-def eval_vae(model, dataloader, criterion=None):
+def train_one_epoch_vae(model, dataloader, optimizer, criterion, scaler):
+    model.train()
+
+    losses = []
+    for x in dataloader:
+        x = x.to(model.device)
+        with torch.cuda.amp.autocast():
+            (mu, log_var), preds = model(x)
+            loss = criterion(preds, x, mu, log_var)
+
+        optimizer.zero_grad()
+        scaler.scale(loss).backward()
+        scaler.unscale_(optimizer)
+        scaler.step(optimizer)
+        scaler.update()
+
+        losses.append(loss.detach().cpu().item())
+
+    return np.mean(losses)
+
+def eval_vae(model, dataloader, criterion):
     model.eval()
 
     losses = []
     with torch.no_grad():
         for x in dataloader:
             x = x.to(model.device)
-            (mu, log_var), preds = model(x)
-
-            loss = criterion(preds, x, mu, log_var)
-            losses.append(loss.detach().cpu().item())
+            with torch.cuda.amp.autocast():
+                (mu, log_var), preds = model(x)
+                loss = criterion(preds, x, mu, log_var)
+                losses.append(loss.detach().cpu().item())
 
     return np.mean(losses)
 
@@ -151,6 +157,7 @@ if __name__ == "__main__":
     criterion = LOSS_DICT[args.loss]() if 'vae' in args.model else nn.MSELoss()
     optimizer = OPTIM_DICT[args.optim](model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     train_one_epoch = train_one_epoch_vae if 'vae' in args.model else train_one_epoch_ae
+    scaler = torch.cuda.amp.GradScaler(enabled=args.use_amp)
 
     # Logging
     log_path = f"../log/{datetime.today().strftime('%b%d_%H:%M:%S')}_{args.model}"
@@ -166,7 +173,7 @@ if __name__ == "__main__":
     train_losses = []
     eval_losses = []
     for epoch in tqdm(range(args.epochs)):
-        train_loss = train_one_epoch(model, train_dataloader, optimizer, criterion)
+        train_loss = train_one_epoch(model, train_dataloader, optimizer, criterion, scaler)
         train_losses.append(train_loss)
         if (epoch + 1) % args.eval_step == 0:
             eval_loss = eval_vae(model, eval_dataloader, criterion)

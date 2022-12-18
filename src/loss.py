@@ -13,8 +13,19 @@ class KLDivBCELoss(nn.Module):
         return kld_loss + bce_loss
 
 
+class KLDivMSELoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, preds, targets, mu, log_var):
+        kld_loss = 0.5 * torch.sum(-1 - log_var + mu.pow(2) + log_var.exp())
+        mse_loss = F.mse_loss(preds, targets, reduction='sum')
+        return kld_loss + mse_loss
+
+
 LOSS_DICT = {
-    'kld_bce': KLDivBCELoss
+    'kld_bce': KLDivBCELoss,
+    'kld_mse': KLDivMSELoss,
 }
 
 # 2)

@@ -278,7 +278,8 @@ class ResidualConvVAE(nn.Module, ModuleUtils):
             ResUpBlock(512, 256),
             ResUpBlock(256, 128),
             ResUpBlock(128, 64),
-            ConvUpBlock(64, 3, 4, 2, 1)
+            ConvUpBlock(64, 3, 4, 2, 1),
+            nn.Sigmoid()
         )
         self.latent_dim = latent_dim
 
