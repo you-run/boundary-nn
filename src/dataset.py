@@ -1,7 +1,9 @@
 import glob
-from PIL import Image
+
+import numpy as np
 import torch
 from torch.utils.data import Dataset
+from PIL import Image
 
 
 class VideoFrameDataset(Dataset):
@@ -58,10 +60,12 @@ class SequentialVideoFrameDataset:
         frames = self.get_video_frames(name=name).to(device)
         batch_idx = list(range(0, len(frames) + batch_size + 1, batch_size))
 
+        model.eval()
         outputs = []
-        for start_idx, end_idx in zip(batch_idx, batch_idx[1:]):
-            outputs.append(model(frames[start_idx:end_idx, ...])[0][0])
-        outputs = torch.vstack(outputs)
+        with torch.no_grad():
+            for start_idx, end_idx in zip(batch_idx, batch_idx[1:]):
+                outputs.append(model(frames[start_idx:end_idx, ...])[0][0].detach().cpu().numpy())
+        outputs = np.vstack(outputs)
         return outputs
 
     def __call__(self, name="HB_1"):
