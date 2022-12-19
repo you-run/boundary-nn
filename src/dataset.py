@@ -60,7 +60,7 @@ class SequentialVideoFrameDataset:
 
         outputs = []
         for start_idx, end_idx in zip(batch_idx, batch_idx[1:]):
-            outputs.append(model(frames[start_idx:end_idx, ...]))
+            outputs.append(model(frames[start_idx:end_idx, ...])[0][0])
         outputs = torch.vstack(outputs)
         return outputs
 
@@ -100,11 +100,11 @@ if __name__ == "__main__":
             self.fc = nn.Linear(480, 240)
 
         def forward(self, x):
-            return self.fc(x)
+            return (self.fc(x), torch.randn(5, 5)), torch.randn(5, 5)
 
     model = MyModule().to(device)
-    batch_size = 32
-    outputs = dataset.get_output_with_batch(model, batch_size, "HB_3")
+    batch_size = 4
+    outputs = dataset.get_output_with_batch(model, batch_size, "HB_1")
     print(outputs.shape)
 
     # ret = dataset(name="HB_1")
