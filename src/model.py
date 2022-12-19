@@ -298,6 +298,26 @@ class ResidualConvVAE(nn.Module, ModuleUtils):
         return (mu, log_var), recon
 
 
+class RNN(nn.Module):
+    def __init__(self, input_size, hidden_size, num_layers, device):
+        super(RNN, self).__init__()
+        self.device = device
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+        self.rnn = nn.RNN(input_size, hidden_size, num_layers, batch_first=True)
+        # self.fc = nn.Sequential(nn.Linear(hidden_size * sequence_length, 1), nn.Sigmoid())
+
+    def forward(self, x):
+        h0 = torch.zeros(self.num_layers, x.size()[0], self.hidden_size).to(self.device)
+        # rnn_out1, hidden_state1 = self.rnn(x, h0)
+        # rnn_out2, hidden_state2 = self.rnn(rnn_out1, h0)
+        rnn_out, hidden_state = self.rnn(x, h0)
+        # out = out.reshape(out.shape[0], -1)
+        # out = self.fc(out)
+        # print(rnn_out.shape)
+        return rnn_out, hidden_state
+
+
 MODEL_DICT = {
     'ae': ConvAutoencoder, 
     'ae-v2': ConvAutoencoderV2, 
