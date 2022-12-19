@@ -1,0 +1,20 @@
+{
+    "model": "vae",
+    "in_channels": 64,
+    "latent_dim": 512,
+    "loss": "kld_mse",
+    "optim": "adam",
+    "lr": 0.0003,
+    "weight_decay": 1e-05,
+    "epochs": 200,
+    "batch_size": 32,
+    "eval_step": 5,
+    "img_size": [
+        270,
+        480
+    ],
+    "data_dir": "../data/video_frame",
+    "seed": 0,
+    "use_amp": true,
+    "debug": false
+}
