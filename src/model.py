@@ -293,7 +293,7 @@ class ResidualConvVAE(nn.Module, ModuleUtils):
             z = self.reparameterize(mu, log_var)
         else:
             z = mu
-        z = z.reshape(*z.shape, 1, 1)
+        z = z.view(*z.shape, 1, 1)
         recon = self.decoder(z)
         return (mu, log_var), recon
 
