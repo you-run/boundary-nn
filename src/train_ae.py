@@ -25,7 +25,7 @@ def train_one_epoch_ae(model, dataloader, optimizer, criterion, scaler):
     losses = []
     for x in dataloader:
         x = x.to(model.device)
-        with torch.cuda.amp.autocast():
+        with torch.cuda.amp.autocast(enabled=scaler.is_enabled()):
             _, preds = model(x)
             loss = criterion(preds, x)
 
@@ -45,7 +45,7 @@ def train_one_epoch_vae(model, dataloader, optimizer, criterion, scaler):
     losses = []
     for x in dataloader:
         x = x.to(model.device)
-        with torch.cuda.amp.autocast():
+        with torch.cuda.amp.autocast(enabled=scaler.is_enabled()):
             (mu, log_var), preds = model(x)
             loss = criterion(preds, x, mu, log_var)
 
