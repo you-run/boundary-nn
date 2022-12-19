@@ -1,7 +1,7 @@
 import glob
 from PIL import Image
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 
 
 class VideoFrameDataset(Dataset):
@@ -52,14 +52,25 @@ class SequentialVideoFrameDataset:
         frames = torch.stack(frames)
 
         return frames
-    
+
+    def get_output_with_batch(self, model, batch_size, name="HB_1"):
+        device = model.device
+        frames = self.get_video_frames(name=name).to(device)
+        batch_idx = list(range(0, len(frames) + batch_size + 1, batch_size))
+
+        outputs = []
+        for start_idx, end_idx in zip(batch_idx, batch_idx[1:]):
+            outputs.append(model(frames[start_idx:end_idx, ...]))
+        outputs = torch.vstack(outputs)
+        return outputs
+
     def __call__(self, name="HB_1"):
         return self.get_video_frames(name)
-        
 
 
 if __name__ == "__main__":
     import torchvision.transforms as T
+    from torch.utils.data import DataLoader
 
     transform = T.Compose([
         T.Resize(size=(270, 480)),
@@ -70,14 +81,32 @@ if __name__ == "__main__":
         ),
     ])
 
-    dataset = VideoFrameDataset('../data/video_frame/', transform=transform, train=False)
-    dataloader = DataLoader(dataset, batch_size=4, shuffle=True, num_workers=1)
+    # dataset = VideoFrameDataset('../data/video_frame/', transform=transform, train=False)
+    # dataloader = DataLoader(dataset, batch_size=4, shuffle=True, num_workers=1)
 
-    for x in dataloader:
-        print(x.shape)
-        assert 0
+    # for x in dataloader:
+    #     print(x.shape)
+    #     assert 0
 
-    # dataset = SequentialVideoFrameDataset('../data/video_frame/', transform=transform)
+    import torch.nn as nn
+
+    device = torch.device("cuda" if torch.cuda.is_available else "cpu")
+    dataset = SequentialVideoFrameDataset('../data/video_frame/', transform=transform)
+
+    from model import ModuleUtils
+    class MyModule(nn.Module, ModuleUtils):
+        def __init__(self):
+            super().__init__()
+            self.fc = nn.Linear(480, 240)
+
+        def forward(self, x):
+            return self.fc(x)
+
+    model = MyModule().to(device)
+    batch_size = 32
+    outputs = dataset.get_output_with_batch(model, batch_size, "HB_3")
+    print(outputs.shape)
+
     # ret = dataset(name="HB_1")
     # print(ret.shape)
 
