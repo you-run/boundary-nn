@@ -1,6 +1,6 @@
 import os
 import json
-from pathlib import Path
+import random
 from datetime import datetime
 
 import numpy as np
@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 from utils import get_args, get_systme_info, set_figure_options, set_seed, configure_cudnn
-from dataset import VideoFrameDataset
+from dataset import VideoFrameDataset, get_recon_dataset
 from model import MODEL_DICT
 from loss import LOSS_DICT
 from optimizer import OPTIM_DICT
@@ -59,14 +59,14 @@ def train_one_epoch_vae(model, dataloader, optimizer, criterion, scaler):
 
     return np.mean(losses)
 
-def eval_vae(model, dataloader, criterion):
+def eval_vae(model, dataloader, criterion, scaler):
     model.eval()
 
     losses = []
     with torch.no_grad():
         for x in dataloader:
             x = x.to(model.device)
-            with torch.cuda.amp.autocast():
+            with torch.cuda.amp.autocast(enabled=scaler.is_enabled()):
                 (mu, log_var), preds = model(x)
                 loss = criterion(preds, x, mu, log_var)
                 losses.append(loss.detach().cpu().item())
@@ -74,26 +74,34 @@ def eval_vae(model, dataloader, criterion):
     return np.mean(losses)
 
 def recon_and_plot(model, recon_dataset, epoch, log_path): # dataset : example dataset
-    def show_bef_aft(ax, bef, aft): # ax = (ax1, ax2)
-        ax[0].imshow(to_pil_image(bef, mode='RGB'))
-        ax[0].set_title("Original")
-        ax[1].imshow(to_pil_image(aft, mode='RGB'))
-        ax[1].set_title("Reconstructed")
+    def set_imshow_plot(ax):
+        for _, spine in ax.spines.items():
+            spine.set_visible(False)
+        ax.tick_params(left=False, labelleft=False, bottom=False, labelbottom=False)
+
 
     model.eval()
     with torch.no_grad():
         _, preds = model(recon_dataset.to(model.device))
         preds = preds.detach().cpu()
     
-    plot_len = len(recon_dataset) # dataset: (N, 3, H, W)
-    fig, ax = plt.subplots(plot_len, 2)
-    for i in range(plot_len):
-        show_bef_aft(ax[i], recon_dataset[i, ...], preds[i, ...])
-    fig.suptitle(f"Before & After at epoch {epoch}")
+    fig, axs = plt.subplots(3, 6, figsize=(18, 7), dpi=200)
+    fig.tight_layout()
+    plt.subplots_adjust(left=None, bottom=None, right=None, top=None, wspace=0.1, hspace=0.0)
+    for i in range(3):
+        for j in range(3):
+            axs[i][j * 2].imshow(to_pil_image(recon_dataset[i * 3 + j, ...], mode='RGB'))
+            axs[i][j * 2 + 1].imshow(to_pil_image(preds[i * 3 + j, ...], mode='RGB'))
+            axs[i][j * 2].set_title("Image")
+            axs[i][j * 2 + 1].set_title("Reconstructed")
+            set_imshow_plot(axs[i][j * 2])
+            set_imshow_plot(axs[i][j * 2 + 1])
+
+    fig.suptitle(f"Epoch: {epoch}", y=0.99, fontsize=16)
     plt.savefig(os.path.join(log_path, 'recon', f"epoch_{epoch}.png"))
 
 def plot_progress(train_losses, eval_losses, eval_step, log_path):
-    fig, ax = plt.subplots(1, 1, figsize=(6, 6), dpi=150)
+    _, ax = plt.subplots(1, 1, figsize=(6, 6), dpi=150)
     train_x = np.arange(len(train_losses)) + 1
     eval_x = np.arange(eval_step, len(train_losses) + 1, eval_step)
 
@@ -118,13 +126,18 @@ if __name__ == "__main__":
     print(args)
 
     # Dataset & Dataloader
+    train_indices = random.sample(range(30), 24) # Used only when the eval_mode == 1
+    transform = transform=transforms.Compose([
+        transforms.Resize(size=tuple(args.img_size)),
+        transforms.ToTensor(),
+    ])
+
     train_dataset = VideoFrameDataset(
         args.data_dir,
-        transform=transforms.Compose([
-            transforms.Resize(size=tuple(args.img_size)),
-            transforms.ToTensor(),
-        ]),
+        transform=transform,
         train=True,
+        train_indices=train_indices,
+        eval_mode=args.eval_mode,
         debug=args.debug
     )
     train_dataloader = DataLoader(
@@ -136,12 +149,11 @@ if __name__ == "__main__":
 
     eval_dataset = VideoFrameDataset(
         args.data_dir,
-        transform=transforms.Compose([
-            transforms.Resize(size=tuple(args.img_size)),
-            transforms.ToTensor()
-        ]),
+        transform=transform,
         train=False,
-        debug=args.debug
+        train_indices=train_indices,
+        eval_mode=args.eval_mode,
+        debug=args.debug,
     )
     eval_dataloader = DataLoader(
         eval_dataset,
@@ -150,7 +162,7 @@ if __name__ == "__main__":
         num_workers=num_workers
     )
 
-    recon_dataset = torch.stack([eval_dataset[len(eval_dataset) // (i + 2)] for i in range(5)])
+    recon_dataset = get_recon_dataset(args.data_dir, transform=transform)
 
     # Model, Criterion, Optimizer
     model = MODEL_DICT[args.model](in_channels=args.in_channels, latent_dim=args.latent_dim).to(device)
@@ -176,7 +188,7 @@ if __name__ == "__main__":
         train_loss = train_one_epoch(model, train_dataloader, optimizer, criterion, scaler)
         train_losses.append(train_loss)
         if (epoch + 1) % args.eval_step == 0:
-            eval_loss = eval_vae(model, eval_dataloader, criterion)
+            eval_loss = eval_vae(model, eval_dataloader, criterion, scaler)
             eval_losses.append(eval_loss)
             if best_loss > eval_loss:
                 best_loss = eval_loss

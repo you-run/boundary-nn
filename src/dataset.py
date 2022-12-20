@@ -1,5 +1,7 @@
-import glob
+import os
+import random
 
+import glob
 import numpy as np
 import torch
 from torch.utils.data import Dataset
@@ -7,16 +9,55 @@ from PIL import Image
 
 
 class VideoFrameDataset(Dataset):
-    def __init__(self, root_dir, transform=None, train=True, debug=False):
+    def __init__(
+        self,
+        root_dir,
+        transform=None,
+        train=True,
+        train_indices=None,
+        eval_mode=0,
+        debug=False,
+    ):
+        """ VideoFrameDataset
+
+        Args:
+            root_dir (_type_): _description_
+            transform (_type_, optional): _description_. Defaults to None.
+            train (bool, optional): _description_. Defaults to True.
+            train_indices (list, optional): train data indices, list of length 24
+                enabled only when eval_mode is equal to 1
+            eval_mode (int, optional): _description_. Defaults to 0.
+                0: Split by even/odd-numbered frames across all videos
+                1: Stratified video split
+            debug (bool, optional): _description_. Defaults to False.
+        """
+        assert eval_mode in (0, 1), f"Undefined eval_mode of VideoFrameDataset: {eval_mode}, expected 0 or 1."
+
         super().__init__()
-        self.root_dir = root_dir # .../video_frame
-        self.data_path = list(filter(
-            lambda x: (int(x[:-4].split("_")[-1])) % 2 == (0 if train else 1),
-            glob.glob(root_dir + "/**/*.png", recursive=True)
-        ))
         self.transform = transform
+
+        if eval_mode == 0:
+            self.data_path = list(filter(
+                lambda x: (int(x[:-4].split("_")[-1])) % 2 == (0 if train else 1),
+                glob.glob(root_dir + "/**/*.png", recursive=True)
+            ))
+        else: # eval_mode == 1:
+            self.data_path = []
+            for btype in ("HB", "NB", "SB"):
+                indices = train_indices
+                if not train:
+                    indices = list(set(range(30))).difference(set(indices))
+
+                video_list = sorted(
+                    os.listdir(os.path.join(root_dir, btype)),
+                    key=lambda x: int(x.split("_")[-1])
+                )
+                video_list = list(map(video_list.__getitem__, indices))
+                for video_name in video_list:
+                    self.data_path.extend(glob.glob(root_dir + f"/{video_name}/*.png"))
+
         if debug:
-            self.data_path = self.data_path[:(len(self.data_path) // 10)]
+            self.data_path = self.data_path[:(len(self.data_path) // 50)]
 
     def __getitem__(self, idx):
         img = Image.open(self.data_path[idx])
@@ -70,6 +111,22 @@ class SequentialVideoFrameDataset:
 
     def __call__(self, name="HB_1"):
         return self.get_video_frames(name)
+
+
+def get_recon_dataset(
+    root_dir,
+    transform=None,
+    frames=[
+        "HB/HB_1/HB_1_28.png", "HB/HB_20/HB_20_146.png", "HB/HB_30/HB_30_32.png",
+        "NB/NB_0cut_12/NB_0cut_12_22.png", "NB/NB_0cut_24/NB_0cut_24_25.png", "NB/NB_0cut_3/NB_0cut_3_162.png",
+        "SB/SB_5/SB_5_128.png", "SB/SB_19/SB_19_108.png", "SB/SB_30/SB_30_116.png"
+    ]
+):
+    images = [Image.open(os.path.join(root_dir, frame_path)) for frame_path in frames]
+    if transform is not None:
+        images = [transform(image) for image in images]
+    images = torch.stack(images)
+    return images
 
 
 if __name__ == "__main__":

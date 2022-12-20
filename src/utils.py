@@ -79,6 +79,10 @@ def get_args():
         default=64
     )
     parser.add_argument(
+        '--eval-mode', '-EM', type=int,
+        choices=(0, 1), default=0
+    )
+    parser.add_argument(
         '--eval-step', '-ES', type=int,
         default=5
     )
@@ -95,11 +99,13 @@ def get_args():
         default=0
     )
     parser.add_argument(
-        '--use-amp', '-AMP', type=bool,
+        '--use-amp',
+        action=argparse.BooleanOptionalAction,
         default=False
     )
     parser.add_argument(
-        '--debug', type=bool,
+        '--debug',
+        action=argparse.BooleanOptionalAction,
         default=False
     )
     args = parser.parse_args()
