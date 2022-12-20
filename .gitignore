@@ -11,6 +11,8 @@ MemSeg_clips/
 data/video_frame/
 log*/
 *.ipynb
+backup/
+script.sh
 
 # C extensions
 *.so
