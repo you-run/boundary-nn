@@ -46,7 +46,7 @@ class VideoFrameDataset(Dataset):
             for btype in ("HB", "NB", "SB"):
                 indices = train_indices
                 if not train:
-                    indices = list(set(range(30))).difference(set(indices))
+                    indices = list(set(range(30)).difference(set(indices)))
 
                 video_list = sorted(
                     os.listdir(os.path.join(root_dir, btype)),
@@ -54,7 +54,11 @@ class VideoFrameDataset(Dataset):
                 )
                 video_list = list(map(video_list.__getitem__, indices))
                 for video_name in video_list:
-                    self.data_path.extend(glob.glob(root_dir + f"/{video_name}/*.png"))
+                    self.data_path.extend(glob.glob(root_dir + f"/{btype}/{video_name}/*.png"))
+            self.data_path = list(filter(
+                lambda x: (int(x[:-4].split("_")[-1])) % 2 == 0,
+                self.data_path
+            ))
 
         if debug:
             self.data_path = self.data_path[:(len(self.data_path) // 50)]

@@ -124,9 +124,16 @@ if __name__ == "__main__":
     device, num_workers = get_systme_info()
     print(f"Device: {device} | Seed: {args.seed} | Debug: {args.debug}")
     print(args)
+    print("Cross-Val strategy: ", end="")
+    if args.eval_mode == 0:
+        train_indices = None
+        print("Split by even/odd-numbered")
+    else:
+        train_indices = sorted(random.sample(range(30), 24))
+        print("Stratified video split")
+        print(f"Train data indices: {[x + 1 for x in train_indices]}")
 
     # Dataset & Dataloader
-    train_indices = random.sample(range(30), 24) # Used only when the eval_mode == 1
     transform = transform=transforms.Compose([
         transforms.Resize(size=tuple(args.img_size)),
         transforms.ToTensor(),
