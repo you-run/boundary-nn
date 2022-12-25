@@ -14,32 +14,12 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 from utils import get_args, get_systme_info, set_figure_options, set_seed, configure_cudnn
-from dataset import VideoFrameDataset, get_recon_dataset
+from dataset import RandomFrameDataset, get_recon_dataset
 from model import MODEL_DICT
 from loss import LOSS_DICT
 from optimizer import OPTIM_DICT
 
-def train_one_epoch_ae(model, dataloader, optimizer, criterion, scaler):
-    model.train()
-
-    losses = []
-    for x in dataloader:
-        x = x.to(model.device)
-        with torch.cuda.amp.autocast(enabled=scaler.is_enabled()):
-            _, preds = model(x)
-            loss = criterion(preds, x)
-
-        optimizer.zero_grad()
-        scaler.scale(loss).backward()
-        scaler.unscale_(optimizer)
-        scaler.step(optimizer)
-        scaler.update()
-
-        losses.append(loss.detach().cpu().item())
-
-    return np.mean(losses)
-
-def train_one_epoch_vae(model, dataloader, optimizer, criterion, scaler):
+def train_one_epoch(model, dataloader, optimizer, criterion, scaler):
     model.train()
 
     losses = []
@@ -59,7 +39,7 @@ def train_one_epoch_vae(model, dataloader, optimizer, criterion, scaler):
 
     return np.mean(losses)
 
-def eval_vae(model, dataloader, criterion, scaler):
+def eval(model, dataloader, criterion, scaler):
     model.eval()
 
     losses = []
@@ -139,7 +119,7 @@ if __name__ == "__main__":
         transforms.ToTensor(),
     ])
 
-    train_dataset = VideoFrameDataset(
+    train_dataset = RandomFrameDataset(
         args.data_dir,
         transform=transform,
         train=True,
@@ -154,7 +134,7 @@ if __name__ == "__main__":
         num_workers=num_workers
     )
 
-    eval_dataset = VideoFrameDataset(
+    eval_dataset = RandomFrameDataset(
         args.data_dir,
         transform=transform,
         train=False,
@@ -173,9 +153,8 @@ if __name__ == "__main__":
 
     # Model, Criterion, Optimizer
     model = MODEL_DICT[args.model](in_channels=args.in_channels, latent_dim=args.latent_dim).to(device)
-    criterion = LOSS_DICT[args.loss]() if 'vae' in args.model else nn.MSELoss()
+    criterion = LOSS_DICT[args.loss]()
     optimizer = OPTIM_DICT[args.optim](model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    train_one_epoch = train_one_epoch_vae if 'vae' in args.model else train_one_epoch_ae
     scaler = torch.cuda.amp.GradScaler(enabled=args.use_amp)
 
     # Logging
@@ -195,7 +174,7 @@ if __name__ == "__main__":
         train_loss = train_one_epoch(model, train_dataloader, optimizer, criterion, scaler)
         train_losses.append(train_loss)
         if (epoch + 1) % args.eval_step == 0:
-            eval_loss = eval_vae(model, eval_dataloader, criterion, scaler)
+            eval_loss = eval(model, eval_dataloader, criterion, scaler)
             eval_losses.append(eval_loss)
             if best_loss > eval_loss:
                 best_loss = eval_loss
@@ -204,6 +183,4 @@ if __name__ == "__main__":
             recon_and_plot(model, recon_dataset, epoch + 1, log_path)
             print(f"[Epoch {epoch + 1}/{args.epochs}] Train loss: {train_loss:.5f} | Eval loss: {eval_loss:.5f} | Best loss: {best_loss:.5f}")
             plot_progress(train_losses, eval_losses, args.eval_step, log_path)
-
-    # Plotting
-    torch.save(model.state_dict(), os.path.join(log_path, f"{args.model}_final.pt"))
+            torch.save(model.state_dict(), os.path.join(log_path, f"{args.model}_last_epoch.pt"))

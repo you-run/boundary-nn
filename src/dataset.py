@@ -1,5 +1,5 @@
 import os
-import random
+from collections import defaultdict
 
 import glob
 import numpy as np
@@ -8,7 +8,7 @@ from torch.utils.data import Dataset
 from PIL import Image
 
 
-class VideoFrameDataset(Dataset):
+class RandomFrameDataset(Dataset):
     def __init__(
         self,
         root_dir,
@@ -18,20 +18,20 @@ class VideoFrameDataset(Dataset):
         eval_mode=0,
         debug=False,
     ):
-        """ VideoFrameDataset
+        """ RandomFrameDataset
 
         Args:
             root_dir (_type_): _description_
             transform (_type_, optional): _description_. Defaults to None.
             train (bool, optional): _description_. Defaults to True.
             train_indices (list, optional): train data indices, list of length 24
-                enabled only when eval_mode is equal to 1
+                enabled only when eval_mode is 1
             eval_mode (int, optional): _description_. Defaults to 0.
                 0: Split by even/odd-numbered frames across all videos
                 1: Stratified video split
             debug (bool, optional): _description_. Defaults to False.
         """
-        assert eval_mode in (0, 1), f"Undefined eval_mode of VideoFrameDataset: {eval_mode}, expected 0 or 1."
+        assert eval_mode in (0, 1), f"Undefined eval_mode of RandomFrameDataset: {eval_mode}, expected 0 or 1."
 
         super().__init__()
         self.transform = transform

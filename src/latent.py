@@ -16,7 +16,7 @@ from tqdm import tqdm
 from sklearn.decomposition import PCA
 
 from utils import get_args, get_systme_info, set_figure_options, set_seed, configure_cudnn
-from dataset import VideoFrameDataset, SequentialVideoFrameDataset
+from dataset import RandomFrameDataset, SequentialVideoFrameDataset
 from model import MODEL_DICT, ConvVAE
 from loss import LOSS_DICT
 from optimizer import OPTIM_DICT

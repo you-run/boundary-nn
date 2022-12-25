@@ -8,6 +8,8 @@ __pycache__/
 .DS_Store
 data/video/
 MemSeg_clips/
+MemSeg_SceneRecogImg/
+MemSeg_timeDiscrimImg/
 data/video_frame/
 log*/
 *.ipynb

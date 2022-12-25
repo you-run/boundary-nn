@@ -1,5 +1,6 @@
 import os
 import random
+from multiprocessing import cpu_count
 
 import numpy as np
 import torch
@@ -30,15 +31,21 @@ def configure_cudnn(debug=False):
         cudnn.deterministic = True
         cudnn.benchmark = False
 
+def get_num_workers():
+    if cpu_count() > 5:
+        num_workers = cpu_count() // 2
+    elif cpu_count() < 2:
+        num_workers = 0
+    else:
+        num_workers = 2
+        
+    return num_workers
+
 def get_systme_info():
-    device = 'cpu'
-    num_workers = 1
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    num_workers = get_num_workers()
 
-    if torch.cuda.is_available():
-        device = 'cuda'
-        num_workers = 4
-
-    return torch.device(device), num_workers
+    return device, num_workers
 
 def get_args():
     parser = argparse.ArgumentParser(description="Training")
