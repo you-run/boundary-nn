@@ -2,7 +2,7 @@ from abc import *
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 import torchvision.transforms as T
 
 
@@ -140,6 +140,31 @@ class ResUpBlock(nn.Module):
         if self.pool is not None:
             out = self.pool(out)
         return out
+
+
+# class PaddedSeqRNN(nn.Module):
+#     def __init__(
+#         self,
+#         input_size, hidden_size,
+#         num_layers=1, nonlinearity='tanh',
+#         dropout=False, batch_first=False, bidirectional=False
+#     ):
+#         super().__init__()
+#         self.rnn = nn.RNN(
+#             input_size=input_size,
+#             hidden_size=hidden_size,
+#             num_layers=num_layers,
+#             nonlinearity=nonlinearity,
+#             dropout=dropout,
+#             batch_first=batch_first
+#         ) 
+
+#     def forward(self, x, seq_len): 
+#         packed_x = pack_padded_sequence(x, seq_len.cpu(), batch_first=True, enforce_sorted=False)
+#         out, _ = self.rnn(packed_x)
+#         out, _ = pad_packed_sequence(out, batch_first=True) # (N, max_seq_len, hidden_dim)
+#         out = out[:, -1, :] # (N, hidden_dim)
+#         return out
 
 
 class ConvVAE(nn.Module, ModuleUtils):
@@ -636,7 +661,6 @@ class VideoVAE(nn.Module, ModuleUtils): # For unbatched input
             hidden_size=latent_dim,
             num_layers=1,
             nonlinearity='tanh',
-            dropout=False,
             batch_first=True
         ) # (L, latent_dim)
         self.dropout = nn.Dropout(p=dropout)
@@ -648,10 +672,8 @@ class VideoVAE(nn.Module, ModuleUtils): # For unbatched input
             hidden_size=feature_dim,
             num_layers=1,
             nonlinearity='tanh',
-            dropout=False,
             batch_first=True
         ) # (L, feature_dim)
-
 
     def encoding(self, x, h0=None):
         """ Encoding
@@ -663,11 +685,11 @@ class VideoVAE(nn.Module, ModuleUtils): # For unbatched input
         x = x.view(-1, *x.shape[2:]) # (N * L, C, H, W)
 
         # Encoder: CNN
-        features = self.conv_vae.encoder(x) # (N * L, feature_dim)
+        features = self.conv_vae.enc_mu(self.conv_vae.encoder(x)) # (N * L, feature_dim)
         features = features.view(batch_size, seq_len, -1) # (N, L, feature_dim)
 
         # Encoder: RNN
-        features, hn = self.encoder_rnn(features, h_0=h0) # (N, L, latent_dim), (1, N, latent_dim)
+        features, hn = self.encoder_rnn(features, h0) # (N, L, latent_dim), (1, N, latent_dim)
         
         mu = self.enc_mu(self.dropout(features)) # (N, L, latent_dim)
         log_var = self.enc_var(self.dropout(features)) # (N, L, latent_dim)
@@ -682,8 +704,8 @@ class VideoVAE(nn.Module, ModuleUtils): # For unbatched input
         """
         # Decoder: RNN
         batch_size, seq_len = x.shape[:2]
-        features, hn = self.decoder_rnn(x, h_0=h0) # (N, L, feature_dim)
-        features = features.view(batch_size, seq_len, -1) # (N * L, feature_dim)
+        features, hn = self.decoder_rnn(x, h0) # (N, L, feature_dim)
+        features = features.view(batch_size * seq_len, -1) # (N * L, feature_dim)
         
         # Decoder: CNN
         recon = self.conv_vae.decoding(features) # (N * L, C, H, W)
@@ -691,10 +713,10 @@ class VideoVAE(nn.Module, ModuleUtils): # For unbatched input
         return recon, hn
 
     def forward(self, x, enc_h0=None, dec_h0=None):
-        (mu, log_var), enc_hn = self.encoding(x, ho=enc_h0)
+        (mu, log_var), enc_hn = self.encoding(x, h0=enc_h0)
         z = self.reparameterize(mu, log_var) # (N, L, latent_dim)
         recon, dec_hn = self.decoding(z, h0=dec_h0) # (N, L, C, H, W)
-        return (mu, log_var), recon, (enc_hn, dec_hn)
+        return (mu, log_var), recon #, (enc_hn, dec_hn)
 
 
 class RNN(nn.Module):

@@ -5,6 +5,7 @@ import glob
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+from torch.nn.utils.rnn import pad_sequence
 from PIL import Image
 
 
@@ -73,7 +74,98 @@ class RandomFrameDataset(Dataset):
         return len(self.data_path)
 
 
-class SequentialVideoFrameDataset:
+class VideoFrameDataset(Dataset):
+    def __init__(
+        self,
+        root_dir,
+        transform=None,
+        train=True,
+        train_indices=None,
+        eval_mode=0,
+        debug=False,
+    ):
+        """ VideoFrameDataset
+
+        Args:
+            root_dir (_type_): _description_
+            transform (_type_, optional): _description_. Defaults to None.
+            train (bool, optional): _description_. Defaults to True.
+            train_indices (list, optional): train data indices, list of length 24
+                enabled only when eval_mode is 1
+            eval_mode (int, optional): _description_. Defaults to 0.
+                0: Split by even/odd-numbered frames across all videos
+                1: Stratified video split
+            debug (bool, optional): _description_. Defaults to False.
+        """
+        assert eval_mode in (0, 1), f"Undefined eval_mode of VideoFrameDataset: {eval_mode}, expected 0 or 1."
+
+        super().__init__()
+        self.transform = transform
+
+        if eval_mode == 0:
+            data_path = list(filter(
+                lambda x: (int(x[:-4].split("_")[-1])) % 2 == (0 if train else 1),
+                glob.glob(root_dir + "/**/*.png", recursive=True)
+            ))
+        else: # eval_mode == 1:
+            data_path = []
+            for btype in ("HB", "NB", "SB"):
+                indices = train_indices
+                if not train:
+                    indices = list(set(range(30)).difference(set(indices)))
+
+                video_list = sorted(
+                    os.listdir(os.path.join(root_dir, btype)),
+                    key=lambda x: int(x.split("_")[-1])
+                )
+                video_list = list(map(video_list.__getitem__, indices))
+                for video_name in video_list:
+                    data_path.extend(glob.glob(root_dir + f"/{btype}/{video_name}/*.png"))
+            data_path = list(filter(
+                lambda x: (int(x[:-4].split("_")[-1])) % 2 == 0,
+                data_path
+            ))
+
+        if debug:
+            data_path = data_path[:(len(data_path) // 50)]
+
+        self.dataset = defaultdict(list)
+        for d in data_path:
+            self.dataset[d.split('/')[4]].append(d)
+        for k, v in self.dataset.items():
+            self.dataset[k] = sorted(v, key=lambda x: int(x[:-4].split("_")[-1]))[::2]
+        self.dataset = list(self.dataset.values())
+
+    def __getitem__(self, video_idx):
+        pathset = self.dataset[video_idx]
+        imageset = []
+        for path in pathset:
+            img = Image.open(path)
+            if self.transform is not None:
+                img = self.transform(img)
+            imageset.append(np.expand_dims(img, axis=0))
+        imageset = np.vstack(imageset)
+        return imageset
+
+    def __len__(self):
+        return len(self.dataset)
+
+
+class VideoCollator(object):
+    def __init__(self, seq_len, padding_value=0.):
+        self.seq_len = seq_len
+        self.padding_value = padding_value
+
+    def __call__(self, data): # list[(L, C, H, W)], len(list) == N
+        self.input_seq = pad_sequence(
+            data,
+            batch_first=True,
+            padding_value=self.padding_value
+        ) # (N, L_max, C, H, W)
+        return self.input_seq
+
+
+class SingleVideoHandler:
     def __init__(self, root_dir, transform=None, debug=False):
         self.root_dir = root_dir # .../video_frame
         self.transform = transform
@@ -156,7 +248,7 @@ if __name__ == "__main__":
     import torch.nn as nn
 
     device = torch.device("cuda" if torch.cuda.is_available else "cpu")
-    dataset = SequentialVideoFrameDataset('../data/video_frame/', transform=transform)
+    dataset = SingleVideoHandler('../data/video_frame/', transform=transform)
 
     from model import ModuleUtils
     class MyModule(nn.Module, ModuleUtils):

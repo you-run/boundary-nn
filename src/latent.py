@@ -16,7 +16,7 @@ from tqdm import tqdm
 from sklearn.decomposition import PCA
 
 from utils import get_args, get_systme_info, set_figure_options, set_seed, configure_cudnn
-from dataset import RandomFrameDataset, SequentialVideoFrameDataset
+from dataset import RandomFrameDataset, SingleVideoHandler
 from model import MODEL_DICT, ConvVAE
 from loss import LOSS_DICT
 from optimizer import OPTIM_DICT
@@ -132,7 +132,7 @@ if __name__ == "__main__":
     print(f"Device: {device} | Seed: {args.seed} | Debug: {args.debug}")
     print(args)
 
-    seq_dataset = SequentialVideoFrameDataset(
+    seq_dataset = SingleVideoHandler(
         args.data_dir,
         transform=transforms.Compose([
             transforms.Resize(size=tuple(args.img_size)),
