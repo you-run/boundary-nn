@@ -62,8 +62,8 @@ def recon_and_plot(model, recon_dataset, epoch, log_path): # dataset : example d
 
     model.eval()
     with torch.no_grad():
-        _, preds = model(recon_dataset.to(model.device))
-        preds = preds.detach().cpu()
+        _, preds = model(recon_dataset.unsqueeze(0).to(model.device))
+        preds = preds.detach().cpu().squeeze(0)
     
     fig, axs = plt.subplots(3, 6, figsize=(18, 7), dpi=200)
     fig.tight_layout()
