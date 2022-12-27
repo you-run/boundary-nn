@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from sklearn.decomposition import PCA
 
-from utils import get_args, get_systme_info, set_figure_options, set_seed, configure_cudnn
+from utils import get_args, get_system_info, set_figure_options, set_seed, configure_cudnn
 from dataset import RandomFrameDataset, SingleVideoHandler
 from model import MODEL_DICT, ConvVAE
 from loss import LOSS_DICT
@@ -128,7 +128,7 @@ if __name__ == "__main__":
     set_seed(seed=args.seed)
     configure_cudnn(debug=args.debug)
 
-    device, num_workers = get_systme_info()
+    device, num_workers = get_system_info()
     print(f"Device: {device} | Seed: {args.seed} | Debug: {args.debug}")
     print(args)
 

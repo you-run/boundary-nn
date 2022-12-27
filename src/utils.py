@@ -41,7 +41,7 @@ def get_num_workers():
         
     return num_workers
 
-def get_systme_info():
+def get_system_info():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     num_workers = get_num_workers()
 
