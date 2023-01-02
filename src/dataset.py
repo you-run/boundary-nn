@@ -131,9 +131,9 @@ class VideoFrameDataset(Dataset):
 
         self.dataset = defaultdict(list)
         for d in data_path:
-            self.dataset[d.split('/')[4]].append(d)
+            self.dataset[d.split('/')[-2]].append(d)
         for k, v in self.dataset.items():
-            self.dataset[k] = sorted(v, key=lambda x: int(x[:-4].split("_")[-1]))[::2]
+            self.dataset[k] = sorted(v, key=lambda x: int(x[:-4].split("_")[-1]))
         self.dataset = list(self.dataset.values())
 
     def __getitem__(self, video_idx):
