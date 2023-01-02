@@ -99,7 +99,7 @@ def get_args():
     )
     parser.add_argument(
         '--data-dir', '-DD', type=str,
-        default='../data/video_frame'
+        default='../../../data/video_frame'
     )
     parser.add_argument(
         '--seed', '-S', type=int,
