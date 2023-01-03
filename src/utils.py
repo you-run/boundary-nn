@@ -106,6 +106,11 @@ def get_args():
         default=0
     )
     parser.add_argument(
+        '--log',
+        action=argparse.BooleanOptionalAction,
+        default=True
+    )
+    parser.add_argument(
         '--use-amp',
         action=argparse.BooleanOptionalAction,
         default=False

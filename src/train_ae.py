@@ -53,12 +53,11 @@ def eval(model, dataloader, criterion, scaler):
 
     return np.mean(losses)
 
-def recon_and_plot(model, recon_dataset, epoch, log_path): # dataset : example dataset
+def recon_and_plot(model, recon_dataset, epoch, log_path=None): # dataset : example dataset
     def set_imshow_plot(ax):
         for _, spine in ax.spines.items():
             spine.set_visible(False)
         ax.tick_params(left=False, labelleft=False, bottom=False, labelbottom=False)
-
 
     model.eval()
     with torch.no_grad():
@@ -78,9 +77,10 @@ def recon_and_plot(model, recon_dataset, epoch, log_path): # dataset : example d
             set_imshow_plot(axs[i][j * 2 + 1])
 
     fig.suptitle(f"Epoch: {epoch}", y=0.99, fontsize=16)
-    plt.savefig(os.path.join(log_path, 'recon', f"epoch_{epoch}.png"))
+    if log_path is not None:
+        plt.savefig(os.path.join(log_path, 'recon', f"epoch_{epoch}.png"))
 
-def plot_progress(train_losses, eval_losses, eval_step, log_path):
+def plot_progress(train_losses, eval_losses, eval_step, log_path=None):
     _, ax = plt.subplots(1, 1, figsize=(6, 6), dpi=150)
     train_x = np.arange(len(train_losses)) + 1
     eval_x = np.arange(eval_step, len(train_losses) + 1, eval_step)
@@ -91,7 +91,9 @@ def plot_progress(train_losses, eval_losses, eval_step, log_path):
     ax.set_xlabel("Epoch")
     ax.set_ylabel("Loss")
     ax.legend()
-    plt.savefig(os.path.join(log_path, f"loss.png"))
+
+    if log_path is not None:
+        plt.savefig(os.path.join(log_path, f"loss.png"))
 
 
 if __name__ == "__main__":
@@ -158,13 +160,14 @@ if __name__ == "__main__":
     scaler = torch.cuda.amp.GradScaler(enabled=args.use_amp)
 
     # Logging
-    log_path = f"../log/{datetime.today().strftime('%b%d_%H:%M:%S')}_{args.model}"
-    os.makedirs(log_path, exist_ok=True)
-    os.makedirs(os.path.join(log_path, 'recon'), exist_ok=True)
-    with open(os.path.join(log_path, 'hps.txt'), 'w') as f: # Save h.p.s
-        json.dump(args.__dict__, f, indent=4)
-    with open(os.path.join(log_path, 'model.txt'), 'w') as f: # Save model structure
-        f.write(model.__str__())
+    if args.log:
+        log_path = f"../log/{datetime.today().strftime('%b%d_%H:%M:%S')}_{args.model}"
+        os.makedirs(log_path, exist_ok=True)
+        os.makedirs(os.path.join(log_path, 'recon'), exist_ok=True)
+        with open(os.path.join(log_path, 'hps.txt'), 'w') as f: # Save h.p.s
+            json.dump(args.__dict__, f, indent=4)
+        with open(os.path.join(log_path, 'model.txt'), 'w') as f: # Save model structure
+            f.write(model.__str__())
 
     # Training & Evaluation
     best_loss = float('inf')
@@ -178,9 +181,11 @@ if __name__ == "__main__":
             eval_losses.append(eval_loss)
             if best_loss > eval_loss:
                 best_loss = eval_loss
-                torch.save(model.state_dict(), os.path.join(log_path, f"{args.model}_best.pt"))
+                if args.log:
+                    torch.save(model.state_dict(), os.path.join(log_path, f"{args.model}_best.pt"))
                 print(f"Best model at Epoch {epoch + 1}/{args.epochs}, Best eval loss: {best_loss:.5f}")
-            recon_and_plot(model, recon_dataset, epoch + 1, log_path)
             print(f"[Epoch {epoch + 1}/{args.epochs}] Train loss: {train_loss:.5f} | Eval loss: {eval_loss:.5f} | Best loss: {best_loss:.5f}")
-            plot_progress(train_losses, eval_losses, args.eval_step, log_path)
-            torch.save(model.state_dict(), os.path.join(log_path, f"{args.model}_last_epoch.pt"))
+            if args.log:
+                recon_and_plot(model, recon_dataset, epoch + 1, log_path)
+                plot_progress(train_losses, eval_losses, args.eval_step, log_path)
+                torch.save(model.state_dict(), os.path.join(log_path, f"{args.model}_last_epoch.pt"))
