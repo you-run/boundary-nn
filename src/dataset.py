@@ -8,6 +8,12 @@ from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence
 from PIL import Image
 
+def get_dirname(video_name):
+    dirname = video_name
+    if "NB" in video_name:
+        dirname = f"NB_0cut_{video_name.split('_')[-1]}"
+    return dirname
+
 
 class RandomFrameDataset(Dataset):
     def __init__(
@@ -174,7 +180,7 @@ class SingleVideoHandler:
     def get_video_frames(self, name="HB_1"):
         video_type = name.split("_")[0] # HB
         data_path = sorted(
-            glob.glob(self.root_dir + f"/{video_type}/{name}/*.png", recursive=True),
+            glob.glob(self.root_dir + f"/{video_type}/{get_dirname(name)}/*.png", recursive=True),
             key=lambda x: int(x[:-4].split("_")[-1])
         )
         assert len(data_path) != 0, f"Not a valid video name: {name}"
@@ -198,15 +204,44 @@ class SingleVideoHandler:
         batch_idx = list(range(0, len(frames) + batch_size + 1, batch_size))
 
         model.eval()
-        outputs = []
+        mu_set = []
+        log_var_set = []
+        recon_set = []
         with torch.no_grad():
             for start_idx, end_idx in zip(batch_idx, batch_idx[1:]):
-                outputs.append(model(frames[start_idx:end_idx, ...])[0][0].detach().cpu().numpy())
-        outputs = np.vstack(outputs)
-        return outputs
+                (mu, log_var), recon = model(frames[start_idx:end_idx, ...])
+                mu_set.append(mu.detach().cpu().numpy())
+                log_var_set.append(log_var.detach().cpu().numpy())
+                recon_set.append(recon.detach().cpu().numpy())
+        mu = np.vstack(mu_set)
+        log_var = np.vstack(log_var_set)
+        recon = np.vstack(recon_set)
+        return (mu, log_var), recon
 
     def __call__(self, name="HB_1"):
         return self.get_video_frames(name)
+
+
+class SceneRecogDataset:
+    def __init__(self, root_dir, transform=None, debug=False):
+        self.root_dir = root_dir # .../MemSeg_SceneRecogImg
+        self.transform = transform
+        self.debug = debug
+        self.data_path = glob.glob(self.root_dir + "/**/*.png", recursive=True)
+
+    def get_single_data(self, name="HB_1"):
+        target_data_path = sorted([x for x in self.data_path if f"{name}_" in x])
+        assert len(target_data_path) == 2, f"Not a valid video name: {name}"
+
+        new_idx = int("foil" in target_data_path[1])
+        target_data = []
+        for file_path in target_data_path:
+            img = Image.open(file_path).convert("RGB")
+            if self.transform is not None:
+                img = self.transform(img)
+            target_data.append(img)
+
+        return target_data, new_idx
 
 
 def get_recon_dataset(
@@ -245,27 +280,33 @@ if __name__ == "__main__":
     #     print(x.shape)
     #     assert 0
 
-    import torch.nn as nn
+    # import torch.nn as nn
 
-    device = torch.device("cuda" if torch.cuda.is_available else "cpu")
-    dataset = SingleVideoHandler('../data/video_frame/', transform=transform)
+    # device = torch.device("cuda" if torch.cuda.is_available else "cpu")
+    # dataset = SingleVideoHandler('../data/video_frame/', transform=transform)
 
-    from model import ModuleUtils
-    class MyModule(nn.Module, ModuleUtils):
-        def __init__(self):
-            super().__init__()
-            self.fc = nn.Linear(480, 240)
+    # from model import ModuleUtils
+    # class MyModule(nn.Module, ModuleUtils):
+    #     def __init__(self):
+    #         super().__init__()
+    #         self.fc = nn.Linear(480, 240)
 
-        def forward(self, x):
-            return (self.fc(x), torch.randn(5, 5)), torch.randn(5, 5)
+    #     def forward(self, x):
+    #         return (self.fc(x), torch.randn(5, 5)), torch.randn(5, 5)
 
-    model = MyModule().to(device)
-    batch_size = 4
-    outputs = dataset.get_output_with_batch(model, batch_size, "HB_1")
-    print(outputs.shape)
+    # model = MyModule().to(device)
+    # batch_size = 4
+    # outputs = dataset.get_output_with_batch(model, batch_size, "HB_1")
+    # print(outputs.shape)
 
+    #####
+    dataset = SceneRecogDataset(root_dir='../data/MemSeg_SceneRecogImg', transform=transform)
+    print(dataset.get_single_data(name="HB_1")[0][0].shape)
+    print(len(dataset.get_single_data(name="HB_1")[0]))
+    print(dataset.get_single_data(name="HB_1")[1])
     # ret = dataset(name="HB_1")
     # print(ret.shape)
+    #####
 
     # tf = T.ToPILImage()
     # for i, r in enumerate(ret):
