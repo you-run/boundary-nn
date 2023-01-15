@@ -21,6 +21,10 @@ from model import MODEL_DICT
 from loss import LOSS_DICT
 
 
+DATA_PATH = "../../../data"
+MODEL_PATH = "../log/Dec26_03:33:55_resvae-v5-BEST/resvae-v5_last_epoch.pt"
+MODEL_NAME = "resvae-v5"
+
 def sampling_points(mu, log_var, n=100):
     std = torch.exp(log_var / 2)
     eps = torch.randn((n, *mu.shape))
@@ -63,6 +67,7 @@ def plot_scene_recog(
 
 
 if __name__ == "__main__":
+
     # Settings
     set_figure_options()
     device, num_workers = get_system_info()
@@ -73,26 +78,15 @@ if __name__ == "__main__":
         transforms.ToTensor(),
     ])
 
-    model = MODEL_DICT["resvae-v5"](in_channels=32, latent_dim=512)
-    model.load_state_dict(
-        torch.load("../log/Dec26_03:33:55_resvae-v5-BEST/resvae-v5_last_epoch.pt", map_location=device)
-    )
-    video_handler = SingleVideoHandler(root_dir="../data/video_frame", transform=transform)
-    scene_recog_dataset = SceneRecogDataset(root_dir="../data/MemSeg_SceneRecogImg", transform=transform)
+    model = MODEL_DICT[MODEL_NAME](in_channels=32, latent_dim=512)
+    model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
+    video_handler = SingleVideoHandler(root_dir=os.path.join(DATA_PATH, "video_frame"), transform=transform)
+    scene_recog_dataset = SceneRecogDataset(root_dir=os.path.join(DATA_PATH, "MemSeg_SceneRecogImg"), transform=transform)
 
-    fig = plt.figure(figsize=(16, 16), dpi=150)
+    fig, axs = plt.subplots(3, 3, figsize=(12, 12), dpi=150, subplot_kw={"projection": "3d"})
     fig.suptitle("Scene Recognition")
-    ax1 = fig.add_subplot(3, 2, 1, projection='3d')
-    ax2 = fig.add_subplot(3, 2, 2, projection='3d')
-    ax3 = fig.add_subplot(3, 2, 3, projection='3d')
-    ax4 = fig.add_subplot(3, 2, 4, projection='3d')
-    ax5 = fig.add_subplot(3, 2, 5, projection='3d')
-    ax6 = fig.add_subplot(3, 2, 6, projection='3d')
-
-    plot_scene_recog(ax1, model, video_handler, scene_recog_dataset, video_name="HB_1")
-    plot_scene_recog(ax2, model, video_handler, scene_recog_dataset, video_name="HB_2")
-    plot_scene_recog(ax3, model, video_handler, scene_recog_dataset, video_name="NB_1")
-    plot_scene_recog(ax4, model, video_handler, scene_recog_dataset, video_name="NB_2")
-    plot_scene_recog(ax5, model, video_handler, scene_recog_dataset, video_name="SB_1")
-    plot_scene_recog(ax6, model, video_handler, scene_recog_dataset, video_name="SB_2")
+    
+    for i, btype in enumerate(("HB", "NB", "SB")):
+        for j in range(3):
+            plot_scene_recog(axs[i][j], model, video_handler, scene_recog_dataset, video_name=f"{btype}_{j+1}")
     plt.savefig("result_scene_recog.png")
