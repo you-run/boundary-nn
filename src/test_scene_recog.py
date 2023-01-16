@@ -86,7 +86,7 @@ if __name__ == "__main__":
     fig, axs = plt.subplots(3, 3, figsize=(12, 12), dpi=150, subplot_kw={"projection": "3d"})
     fig.suptitle("Scene Recognition")
     
-    for i, btype in enumerate(("HB", "NB", "SB")):
+    for i, btype in enumerate(tqdm(("HB", "NB", "SB"))):
         for j in range(3):
             plot_scene_recog(axs[i][j], model, video_handler, scene_recog_dataset, video_name=f"{btype}_{j+1}")
     plt.savefig("result_scene_recog.png")
