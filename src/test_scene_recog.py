@@ -1,27 +1,20 @@
 import os
 import json
-import random
-from datetime import datetime
 
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import DataLoader
 from torchvision import transforms
-from torchvision.transforms.functional import to_pil_image
 from sklearn.decomposition import PCA
 from tqdm import tqdm
 
-from utils import get_system_info, set_figure_options
+from utils import get_args_scene_recog, get_system_info, set_figure_options
 from dataset import SingleVideoHandler, SceneRecogDataset
 from model import MODEL_DICT
-from loss import LOSS_DICT
 
 
-DATA_PATH = "../../../data"
+DATA_PATH = "../data"
 MODEL_PATH = "../log/Dec26_03:33:55_resvae-v5-BEST/resvae-v5_last_epoch.pt"
 MODEL_NAME = "resvae-v5"
 
@@ -67,7 +60,6 @@ def plot_scene_recog(
 
 
 if __name__ == "__main__":
-
     # Settings
     set_figure_options()
     device, num_workers = get_system_info()
@@ -86,7 +78,12 @@ if __name__ == "__main__":
     fig, axs = plt.subplots(3, 3, figsize=(12, 12), dpi=150, subplot_kw={"projection": "3d"})
     fig.suptitle("Scene Recognition")
     
-    for i, btype in enumerate(tqdm(("HB", "NB", "SB"))):
-        for j in range(3):
-            plot_scene_recog(axs[i][j], model, video_handler, scene_recog_dataset, video_name=f"{btype}_{j+1}")
+    video_list = ["HB_1", "HB_20", "HB_30", "NB_12", "NB_24", "NB_3", "SB_5", "SB_19", "SB_30"]
+    for i, vname in enumerate(tqdm(video_list)):
+        plot_scene_recog(axs[i // 3][i % 3], model, video_handler, scene_recog_dataset, video_name=vname)
     plt.savefig("result_scene_recog.png")
+
+    # for i, btype in enumerate(tqdm(("HB", "NB", "SB"))):
+    #     for j in range(3):
+    #         plot_scene_recog(axs[i][j], model, video_handler, scene_recog_dataset, video_name=f"{btype}_{j+1}")
+    # plt.savefig("result_scene_recog.png")
