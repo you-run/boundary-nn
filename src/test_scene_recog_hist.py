@@ -14,7 +14,7 @@ from dataset import SingleVideoHandler, SceneRecogDataset
 from model import MODEL_DICT
 
 
-DATA_PATH = "../data"
+DATA_PATH = "../../../data"
 MODEL_PATH = "../log/Dec26_03:33:55_resvae-v5-BEST/resvae-v5_last_epoch.pt"
 MODEL_NAME = "resvae-v5"
 
