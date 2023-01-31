@@ -19,47 +19,6 @@ DATA_PATH = "../../../data"
 MODEL_PATH = "../log/Dec26_03:33:55_resvae-v5-BEST/resvae-v5_last_epoch.pt"
 MODEL_NAME = "resvae-v5"
 
-def get_video_latent(
-    model,
-    video_handler,
-    n_components=3
-):
-    for btype in ("HB", "NB", "SB"):
-        for i in tqdm(range(30)):
-            video_name = f"{btype}_{i}"
-            video_frames = video_handler.get_video_frames(name=video_name)
-            model_input = torch.vstack((video_frames, image_a.unsqueeze(0), image_b.unsqueeze(0)))
-    model.eval()
-    with torch.no_grad():
-        video_frames = video_handler.get_video_frames(name=video_name)
-        model_input = torch.vstack((video_frames, image_a.unsqueeze(0), image_b.unsqueeze(0)))
-        (mu, _), _ = model(model_input) # (N+2, 512)
-    
-    pca = PCA(n_components=n_components)
-    denoised_points = pca.fit_transform(mu) # (N+2, 3)
-
-    distance = np.linalg.norm(denoised_points[-1, :] - denoised_points[-2, :])
-    return distance
-
-def get_euclidean_dist(
-    model,
-    video_handler,
-    scene_recog_dataset,
-    video_name,
-    n_components=3
-):
-    model.eval()
-    with torch.no_grad():
-        video_frames = video_handler.get_video_frames(name=video_name)
-        (image_a, image_b), new_idx = scene_recog_dataset.get_single_data(name=video_name)
-        model_input = torch.vstack((video_frames, image_a.unsqueeze(0), image_b.unsqueeze(0)))
-        (mu, _), _ = model(model_input) # (N+2, 512)
-    
-    pca = PCA(n_components=n_components)
-    denoised_points = pca.fit_transform(mu) # (N+2, 3)
-
-    distance = np.linalg.norm(denoised_points[-1, :] - denoised_points[-2, :])
-    return distance
 
 if __name__ == "__main__":
     # Settings
@@ -89,15 +48,41 @@ if __name__ == "__main__":
     model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
     scene_recog_dataset = SceneRecogDataset(root_dir=os.path.join(DATA_PATH, "MemSeg_SceneRecogImg"), transform=transform)
 
-    model.train()
-    mu_set = []
-    log_var_set = []
-    for x in train_dataloader:
-        x = x.to(model.device)
-        (mu, log_var), preds = model(x)
-        mu_set.append(mu.detach().cpu().numpy())
-        log_var_set.append(log_var.detach().cpu().numpy())
 
-    mu = np.vstack(mu_set)
-    log_var = np.vstack(log_var_set)
-    print(mu.shape, log_var.shape)
+    model.eval()
+    with torch.no_grad():
+        video_mu_set = []
+        video_log_var_set = []
+
+        # Video latent
+        for x in train_dataloader:
+            x = x.to(device)
+            (mu, log_var), preds = model(x)
+            video_mu_set.append(mu.detach().cpu().numpy())
+            video_log_var_set.append(log_var.detach().cpu().numpy())
+        video_mu_set = np.vstack(video_mu_set)
+        video_log_var_set = np.vstack(video_log_var_set)
+
+        # Frame latent
+        new_set = []
+        old_set = []
+        for btype in ("HB", "NB", "SB"):
+            for i in tqdm(range(30)):
+                video_name = "{btype}_{i}"
+                images, new_idx = scene_recog_dataset.get_single_data(name=video_name)
+                new_set.append(images[new_idx])
+                old_set.append(images[1 - new_idx])
+        new_set = torch.stack(new_set)
+        old_set = torch.stack(old_set)
+
+        new_set, old_set = new_set.to(device), old_set.to(device)
+        (new_mu_set, new_log_var_set), _ = model(new_set)
+        (old_mu_set, old_log_var_set), _ = model(old_set)
+        new_mu_set = new_mu_set.detach().cpu().numpy()
+        old_mu_set = old_mu_set.detach().cpu().numpy()
+        # Skip log_var cause it is not necessary for now
+
+    print(video_mu_set.shape, new_mu_set.shape, old_mu_set.shape)
+
+    latent_set = np.stack(video_mu_set, new_mu_set, old_mu_set)
+    print(latent_set.shape)
