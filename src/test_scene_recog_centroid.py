@@ -80,7 +80,7 @@ if __name__ == "__main__":
     )
     train_dataloader = DataLoader(
         frame_dataset,
-        batch_size=128,
+        batch_size=32,
         shuffle=True,
         num_workers=num_workers
     )
@@ -92,7 +92,7 @@ if __name__ == "__main__":
     model.train()
     mu_set = []
     log_var_set = []
-    for x in train_dataloader:
+    for x in tqdm(train_dataloader):
         x = x.to(model.device)
         (mu, log_var), preds = model(x)
         mu_set.append(mu.detach().cpu().numpy())
