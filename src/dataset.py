@@ -7,6 +7,7 @@ import torch
 from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence
 from PIL import Image
+import pandas as pd
 
 def get_dirname(video_name):
     dirname = video_name
@@ -243,6 +244,29 @@ class SceneRecogDataset:
 
         return target_data, new_idx
 
+
+
+class TimeDiscriDataset:
+    def __init__(self, root_dir, transform=None, debug=False):
+        self.root_dir = root_dir # .../MemSeg_timeDiscrimImg
+        self.transform = transform
+        self.debug = debug
+        self.data_path = glob.glob(self.root_dir + "/**/*.png", recursive=True)
+
+    def get_single_data(self, name="HB_1"):
+        target_data_path = sorted([x for x in self.data_path if f"{name}_" in x])
+        assert len(target_data_path) == 4, f"Not a valid video name: {name}"
+
+        front_idx = [idx for idx, path in enumerate(target_data_path) if "A" in path ]
+        assert len(front_idx) == 2, f"Index len should be 2, got {len(front_idx)}"
+        target_data = []
+        for file_path in target_data_path:
+            #print(file_path)
+            img = Image.open(file_path).convert("RGB")
+            if self.transform is not None:
+                img = self.transform(img)
+            target_data.append(img)
+        return target_data, front_idx
 
 def get_recon_dataset(
     root_dir,
